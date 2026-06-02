@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="snack_refusal"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_snack"
+        android:shortcutRank="1"
+        android:shortcutShortLabel="@string/shortcut_snack_short"
+        android:shortcutLongLabel="@string/shortcut_snack_long">
+        <intent
+            android:action="com.holdthatbite.action.SNACK_REFUSAL"
+            android:targetClass="com.holdthatbite.MainActivity"
+            android:targetPackage="com.holdthatbite" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="kept_check_in"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_kept"
+        android:shortcutRank="2"
+        android:shortcutShortLabel="@string/shortcut_kept_short"
+        android:shortcutLongLabel="@string/shortcut_kept_long">
+        <intent
+            android:action="com.holdthatbite.action.KEPT_CHECK_IN"
+            android:targetClass="com.holdthatbite.MainActivity"
+            android:targetPackage="com.holdthatbite" />
+    </shortcut>
+</shortcuts>

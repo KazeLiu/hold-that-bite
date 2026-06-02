@@ -1,6 +1,5 @@
 package com.holdthatbite
 
-import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.Intent
 import android.net.Uri
@@ -148,6 +147,7 @@ import com.holdthatbite.ui.AppColorPalette
 import com.holdthatbite.ui.AppColors
 import com.holdthatbite.ui.CheckInSupplement
 import com.holdthatbite.ui.WeightChartModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -163,13 +163,26 @@ import kotlin.math.abs
 import kotlin.math.min
 
 class MainActivity : ComponentActivity() {
+    private var launcherAction by mutableStateOf<LauncherShortcutAction?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        launcherAction = LauncherShortcuts.actionFrom(intent?.action)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.WHITE
         setContent {
-            HoldThatBiteApp(activity = this)
+            HoldThatBiteApp(
+                activity = this,
+                launcherAction = launcherAction,
+                onLauncherActionConsumed = { launcherAction = null },
+            )
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        launcherAction = LauncherShortcuts.actionFrom(intent.action)
     }
 }
 
@@ -209,7 +222,11 @@ private const val UmengPrivacyPolicyUrl = "https://www.umeng.com/page/policy"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HoldThatBiteApp(activity: Activity) {
+private fun HoldThatBiteApp(
+    activity: MainActivity,
+    launcherAction: LauncherShortcutAction?,
+    onLauncherActionConsumed: () -> Unit,
+) {
     val store = remember { BiteStore(activity) }
     val analytics = remember { AnalyticsTracker(activity) }
     var settings by remember { mutableStateOf(store.loadSettings()) }
@@ -224,6 +241,7 @@ private fun HoldThatBiteApp(activity: Activity) {
     var confirmMissedDate by remember { mutableStateOf<LocalDate?>(null) }
     var showPrivacyDialog by remember { mutableStateOf(!settings.privacyPolicyAccepted) }
     var showPolicyDetails by remember { mutableStateOf(false) }
+    var showShortcutEncouragement by remember { mutableStateOf(false) }
     var appOpenTracked by remember { mutableStateOf(false) }
 
     fun saveSettings(nextSettings: AppSettings) {
@@ -238,6 +256,10 @@ private fun HoldThatBiteApp(activity: Activity) {
             analytics.track(AnalyticsEvent.APP_OPEN)
             appOpenTracked = true
         }
+    }
+
+    LaunchedEffect(settings.weightTrendEnabled) {
+        LauncherShortcuts.publishDynamic(activity, settings)
     }
 
     val visibleTabs = if (settings.weightTrendEnabled) {
@@ -284,6 +306,56 @@ private fun HoldThatBiteApp(activity: Activity) {
         snackRefusals = store.loadSnackRefusals()
         selectedDate = today
         visibleMonth = YearMonth.from(today)
+    }
+
+    fun canRecordKeptNow(): Boolean {
+        val now = LocalTime.now()
+        val firstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
+        val nowMealTime = MealTime(now.hour, now.minute)
+        return !settings.fastingPlan.isEatingWindow(firstMeal, nowMealTime)
+    }
+
+    fun handleLauncherShortcut(action: LauncherShortcutAction) {
+        when (action) {
+            LauncherShortcutAction.SNACK_REFUSAL -> {
+                currentTab = AppTab.HOME
+                recordSnackRefusal()
+            }
+            LauncherShortcutAction.KEPT_CHECK_IN -> {
+                val today = LocalDate.now()
+                currentTab = AppTab.HOME
+                selectedDate = today
+                visibleMonth = YearMonth.from(today)
+                if (canRecordKeptNow()) {
+                    recordCheckIn(today, BiteStatus.KEPT)
+                } else {
+                    showShortcutEncouragement = true
+                }
+            }
+            LauncherShortcutAction.RECORD_WEIGHT -> {
+                if (settings.weightTrendEnabled) {
+                    if (currentTab != AppTab.TREND) {
+                        analytics.track(AnalyticsEvent.WEIGHT_TREND_OPENED)
+                    }
+                    currentTab = AppTab.TREND
+                    activeSheet = ActiveSheet.WEIGHT_ONLY
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(launcherAction) {
+        launcherAction?.let { action ->
+            handleLauncherShortcut(action)
+            onLauncherActionConsumed()
+        }
+    }
+
+    LaunchedEffect(showShortcutEncouragement) {
+        if (showShortcutEncouragement) {
+            delay(3200)
+            showShortcutEncouragement = false
+        }
     }
 
     val useDarkTheme = settings.themeMode.shouldUseDarkTheme(isSystemInDarkTheme())
@@ -537,6 +609,19 @@ private fun HoldThatBiteApp(activity: Activity) {
                     dismissButton = {
                         TextButton(onClick = { confirmMissedDate = null }) {
                             Text("先保留守住了", color = TextSecondary)
+                        }
+                    },
+                )
+            }
+
+            if (showShortcutEncouragement) {
+                AlertDialog(
+                    onDismissRequest = { showShortcutEncouragement = false },
+                    title = { Text("快成功了") },
+                    text = { Text("我知道你快成功了，再坚持坚持") },
+                    confirmButton = {
+                        TextButton(onClick = { showShortcutEncouragement = false }) {
+                            Text("确定", color = Primary)
                         }
                     },
                 )
