@@ -9,6 +9,11 @@
 <table>
   <tr>
     <td align="center">
+      <img src="docs/screenshots/2026-06-02-home.png" width="220" alt="主页" />
+      <br />
+      <sub>主页</sub>
+    </td>
+    <td align="center">
       <img src="docs/screenshots/2026-06-02-home-actions.png" width="220" alt="主页打卡" />
       <br />
       <sub>主页打卡</sub>
