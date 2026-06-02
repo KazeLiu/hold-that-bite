@@ -6,21 +6,30 @@
 
 ## 截图
 
-### 主页
-
-![主页](docs/screenshots/2026-06-01-home.png)
-
-### 守住了
-
-![守住了弹窗](docs/screenshots/2026-06-01-victory-dialog.png)
-
-### 体重趋势
-
-![体重趋势](docs/screenshots/2026-06-01-trend.png)
-
-### 设置
-
-![设置](docs/screenshots/2026-06-01-settings.png)
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/screenshots/2026-06-02-home.png" width="220" alt="主页" />
+      <br />
+      <sub>主页</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/2026-06-02-settings.png" width="220" alt="设置" />
+      <br />
+      <sub>设置</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/2026-06-02-fasting-plans.png" width="220" alt="减肥安排" />
+      <br />
+      <sub>减肥安排</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/2026-06-02-trend.png" width="220" alt="体重趋势" />
+      <br />
+      <sub>体重趋势</sub>
+    </td>
+  </tr>
+</table>
 
 ## 这个 App 用来做什么
 
