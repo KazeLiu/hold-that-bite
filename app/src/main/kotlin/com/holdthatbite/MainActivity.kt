@@ -5,8 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.app.TimePickerDialog
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -50,6 +53,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
@@ -134,6 +139,8 @@ import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import com.holdthatbite.analytics.AnalyticsEvent
 import com.holdthatbite.analytics.AnalyticsTracker
+import com.holdthatbite.data.BiteBackupCodec
+import com.holdthatbite.data.BiteBackupPayload
 import com.holdthatbite.data.BiteStore
 import com.holdthatbite.domain.AppSettings
 import com.holdthatbite.domain.BiteCalendar
@@ -247,10 +254,58 @@ private fun HoldThatBiteApp(
     var showPolicyDetails by remember { mutableStateOf(false) }
     var showShortcutEncouragement by remember { mutableStateOf(false) }
     var appOpenTracked by remember { mutableStateOf(false) }
+    var pendingImportPayload by remember { mutableStateOf<BiteBackupPayload?>(null) }
 
     fun saveSettings(nextSettings: AppSettings) {
         settings = nextSettings
         store.saveSettings(nextSettings)
+    }
+
+    fun reloadLocalData() {
+        settings = store.loadSettings()
+        records = store.loadRecords()
+        snackRefusals = store.loadSnackRefusals()
+        weights = store.loadWeights()
+    }
+
+    fun showMessage(message: String) {
+        Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val bytes = BiteBackupCodec
+                .encode(store.exportBackupPayload())
+                .toByteArray(Charsets.UTF_8)
+            activity.contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(bytes)
+            } ?: error("Cannot open export output stream.")
+        }.onSuccess {
+            showMessage("数据已导出")
+        }.onFailure {
+            showMessage("导出失败，请稍后再试")
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            activity.contentResolver.openInputStream(uri)
+                ?.bufferedReader(Charsets.UTF_8)
+                ?.use { it.readText() }
+                ?: error("Cannot open import input stream.")
+        }.mapCatching { json ->
+            BiteBackupCodec.decode(json)
+        }.onSuccess { payload ->
+            pendingImportPayload = payload
+        }.onFailure {
+            showMessage("导入失败，请确认文件是否正确")
+        }
     }
 
     LaunchedEffect(settings.privacyPolicyAccepted, settings.analyticsEnabled) {
@@ -509,6 +564,13 @@ private fun HoldThatBiteApp(
                                         showPolicyDetails = true
                                         analytics.track(AnalyticsEvent.PRIVACY_POLICY_OPENED)
                                     },
+                                    onExportData = {
+                                        val dateText = SimpleDateFormat("yyyyMMdd", Locale.CHINA).format(Date())
+                                        exportLauncher.launch("hold-that-bite-backup-$dateText.json")
+                                    },
+                                    onImportData = {
+                                        importLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+                                    },
                                 )
                             }
                         }
@@ -613,6 +675,45 @@ private fun HoldThatBiteApp(
                     dismissButton = {
                         TextButton(onClick = { confirmMissedDate = null }) {
                             Text("先保留守住了", color = TextSecondary)
+                        }
+                    },
+                )
+            }
+
+            pendingImportPayload?.let { payload ->
+                AlertDialog(
+                    onDismissRequest = { pendingImportPayload = null },
+                    title = { Text("导入并覆盖当前数据？") },
+                    text = {
+                        Text(
+                            "这会用备份文件里的 ${payload.records.size} 条打卡、${payload.weights.size} 条体重和 ${payload.snackRefusals.size} 天零食记录覆盖当前本地数据。"
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                runCatching {
+                                    store.replaceAllFromBackup(payload)
+                                    reloadLocalData()
+                                    selectedDate = LocalDate.now()
+                                    visibleMonth = YearMonth.now()
+                                    pendingRecord = null
+                                    activeSheet = null
+                                    pendingImportPayload = null
+                                }.onSuccess {
+                                    showMessage("数据已导入")
+                                }.onFailure {
+                                    pendingImportPayload = null
+                                    showMessage("导入失败，请确认文件是否正确")
+                                }
+                            }
+                        ) {
+                            Text("覆盖导入", color = Missed)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingImportPayload = null }) {
+                            Text("取消", color = TextSecondary)
                         }
                     },
                 )
@@ -1985,6 +2086,8 @@ private fun SettingsPage(
     settings: AppSettings,
     onSettingsChanged: (AppSettings) -> Unit,
     onPolicyRequested: () -> Unit,
+    onExportData: () -> Unit,
+    onImportData: () -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -2066,6 +2169,46 @@ private fun SettingsPage(
                 )
             },
         )
+        AppCard(modifier = Modifier.fillMaxWidth()) {
+            Text("数据备份", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text("导出 JSON 备份；可用于换设备或恢复本地记录。", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = onImportData,
+                    modifier = Modifier
+                        .height(44.dp)
+                        .weight(1f),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.FileUpload,
+                        contentDescription = "导入数据",
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("导入数据", fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = onExportData,
+                    modifier = Modifier
+                        .height(44.dp)
+                        .weight(1f),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.FileDownload,
+                        contentDescription = "导出数据",
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("导出数据", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         AppCard(
             modifier = Modifier
                 .fillMaxWidth()

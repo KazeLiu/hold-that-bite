@@ -16,6 +16,26 @@ import org.json.JSONObject
 class BiteStore(context: Context) {
     private val preferences = context.getSharedPreferences("hold_that_bite", Context.MODE_PRIVATE)
 
+    /** Builds a complete backup snapshot of user-controlled local data. */
+    fun exportBackupPayload(exportedAtMillis: Long = System.currentTimeMillis()): BiteBackupPayload {
+        return BiteBackupPayload(
+            exportedAtMillis = exportedAtMillis,
+            settings = loadSettings(),
+            records = loadRecords().values.sortedBy { it.dateKey },
+            weights = loadWeights(),
+            snackRefusals = loadSnackRefusals(),
+        )
+    }
+
+    /** Replaces the whole local data set with a decoded backup payload. */
+    fun replaceAllFromBackup(payload: BiteBackupPayload) {
+        preferences.edit().clear().apply()
+        saveSettings(payload.settings)
+        saveRecords(payload.records.sortedBy { it.dateKey })
+        saveWeights(payload.weights.sortedBy { it.timestampMillis })
+        saveSnackRefusals(payload.snackRefusals)
+    }
+
     fun loadSettings(): AppSettings {
         val mode = runCatching {
             CalendarMode.valueOf(preferences.getString(KEY_CALENDAR_MODE, CalendarMode.MONTH.name) ?: CalendarMode.MONTH.name)
