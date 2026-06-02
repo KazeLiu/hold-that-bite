@@ -2,6 +2,8 @@ package com.holdthatbite
 
 import android.app.Activity
 import android.app.DatePickerDialog
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
@@ -199,6 +201,7 @@ private val HomeFixedActionsGap = 10.dp
 private val HomeMonthCalendarHeight = 336.dp
 private val HomeWeekCalendarHeight = 188.dp
 private val CalendarCellGap = 8.dp
+private const val ProjectGitHubUrl = "https://github.com/KazeLiu/hold-that-bite"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -837,17 +840,10 @@ private fun DaySummary(
         else -> "没有记录，非常轻松"
     }
     val note = record?.note?.takeIf { it.isNotBlank() } ?: defaultNote
-    val cardModifier = Modifier
-        .fillMaxWidth()
-        .then(
-            if (record == null) {
-                Modifier
-            } else {
-                Modifier.clickable { onEditNote(record) }
-            }
-        )
-
-    AppCard(modifier = cardModifier) {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = record?.let { { onEditNote(it) } },
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -1762,6 +1758,8 @@ private fun buildWeightHistoryItems(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings) -> Unit) {
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1827,6 +1825,18 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
             checked = settings.askWeightAfterCheckIn,
             onCheckedChange = { onSettingsChanged(settings.copy(askWeightAfterCheckIn = it)) },
         )
+        AppCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "打开项目 GitHub 地址" },
+            onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ProjectGitHubUrl)))
+            },
+        ) {
+            Text("项目地址", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text("github.com/KazeLiu/hold-that-bite", color = Primary, fontSize = 13.sp)
+        }
     }
 }
 
@@ -2128,13 +2138,15 @@ private fun HeaderBlock(title: String) {
 }
 
 @Composable
-private fun AppCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
+private fun AppCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(22.dp)
+    val colors = CardDefaults.cardColors(containerColor = SurfaceColor)
+    val elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    val cardContent: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2145,6 +2157,25 @@ private fun AppCard(modifier: Modifier = Modifier, content: @Composable ColumnSc
                 )
                 .padding(14.dp),
             content = content
+        )
+    }
+
+    if (onClick == null) {
+        Card(
+            modifier = modifier,
+            shape = shape,
+            colors = colors,
+            elevation = elevation,
+            content = { cardContent() },
+        )
+    } else {
+        Card(
+            onClick = onClick,
+            modifier = modifier,
+            shape = shape,
+            colors = colors,
+            elevation = elevation,
+            content = { cardContent() },
         )
     }
 }
