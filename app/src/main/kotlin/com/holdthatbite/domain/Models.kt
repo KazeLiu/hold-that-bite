@@ -43,6 +43,8 @@ data class AppSettings(
     val targetWeightKg: Double? = null,
     val weightUnit: WeightUnit = WeightUnit.KG,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val privacyPolicyAccepted: Boolean = false,
+    val analyticsEnabled: Boolean = false,
 )
 
 data class BiteRecord(

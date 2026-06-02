@@ -43,6 +43,8 @@ class BiteStore(context: Context) {
             targetWeightKg = preferences.getString(KEY_TARGET_WEIGHT_KG, null)?.toDoubleOrNull(),
             weightUnit = weightUnit,
             themeMode = themeMode,
+            privacyPolicyAccepted = preferences.getBoolean(KEY_PRIVACY_POLICY_ACCEPTED, false),
+            analyticsEnabled = preferences.getBoolean(KEY_ANALYTICS_ENABLED, false),
         )
     }
 
@@ -56,6 +58,8 @@ class BiteStore(context: Context) {
             .putBoolean(KEY_ASK_WEIGHT_AFTER_CHECK_IN, settings.askWeightAfterCheckIn)
             .putString(KEY_WEIGHT_UNIT, settings.weightUnit.name)
             .putString(KEY_THEME_MODE, settings.themeMode.name)
+            .putBoolean(KEY_PRIVACY_POLICY_ACCEPTED, settings.privacyPolicyAccepted)
+            .putBoolean(KEY_ANALYTICS_ENABLED, settings.analyticsEnabled)
         if (settings.targetWeightKg == null) {
             editor.remove(KEY_TARGET_WEIGHT_KG)
         } else {
@@ -194,6 +198,8 @@ class BiteStore(context: Context) {
         const val KEY_TARGET_WEIGHT_KG = "target_weight_kg"
         const val KEY_WEIGHT_UNIT = "weight_unit"
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_PRIVACY_POLICY_ACCEPTED = "privacy_policy_accepted"
+        const val KEY_ANALYTICS_ENABLED = "analytics_enabled"
         const val KEY_RECORDS = "records"
         const val KEY_WEIGHTS = "weights"
         const val KEY_SNACK_REFUSALS = "snack_refusals"

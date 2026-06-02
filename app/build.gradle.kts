@@ -11,8 +11,8 @@ android {
         applicationId = "com.holdthatbite"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.3.0"
+        versionCode = 3
+        versionName = "0.4.0"
     }
 
     compileOptions {
@@ -25,6 +25,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 
@@ -44,6 +45,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    implementation("com.umeng.umsdk:common:9.9.1")
+    implementation("com.umeng.umsdk:asms:1.8.7.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
 }

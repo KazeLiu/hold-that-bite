@@ -85,6 +85,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -128,6 +129,8 @@ import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
 import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener
+import com.holdthatbite.analytics.AnalyticsEvent
+import com.holdthatbite.analytics.AnalyticsTracker
 import com.holdthatbite.data.BiteStore
 import com.holdthatbite.domain.AppSettings
 import com.holdthatbite.domain.BiteCalendar
@@ -202,11 +205,13 @@ private val HomeMonthCalendarHeight = 336.dp
 private val HomeWeekCalendarHeight = 188.dp
 private val CalendarCellGap = 8.dp
 private const val ProjectGitHubUrl = "https://github.com/KazeLiu/hold-that-bite"
+private const val UmengPrivacyPolicyUrl = "https://www.umeng.com/page/policy"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HoldThatBiteApp(activity: Activity) {
     val store = remember { BiteStore(activity) }
+    val analytics = remember { AnalyticsTracker(activity) }
     var settings by remember { mutableStateOf(store.loadSettings()) }
     var records by remember { mutableStateOf(store.loadRecords()) }
     var snackRefusals by remember { mutableStateOf(store.loadSnackRefusals()) }
@@ -217,6 +222,23 @@ private fun HoldThatBiteApp(activity: Activity) {
     var activeSheet by remember { mutableStateOf<ActiveSheet?>(null) }
     var pendingRecord by remember { mutableStateOf<BiteRecord?>(null) }
     var confirmMissedDate by remember { mutableStateOf<LocalDate?>(null) }
+    var showPrivacyDialog by remember { mutableStateOf(!settings.privacyPolicyAccepted) }
+    var showPolicyDetails by remember { mutableStateOf(false) }
+    var appOpenTracked by remember { mutableStateOf(false) }
+
+    fun saveSettings(nextSettings: AppSettings) {
+        settings = nextSettings
+        store.saveSettings(nextSettings)
+    }
+
+    LaunchedEffect(settings.privacyPolicyAccepted, settings.analyticsEnabled) {
+        val analyticsAllowed = settings.privacyPolicyAccepted && settings.analyticsEnabled
+        analytics.setEnabled(analyticsAllowed)
+        if (analyticsAllowed && !appOpenTracked) {
+            analytics.track(AnalyticsEvent.APP_OPEN)
+            appOpenTracked = true
+        }
+    }
 
     val visibleTabs = if (settings.weightTrendEnabled) {
         listOf(AppTab.TREND, AppTab.HOME, AppTab.SETTINGS)
@@ -240,6 +262,9 @@ private fun HoldThatBiteApp(activity: Activity) {
         selectedDate = date
         visibleMonth = YearMonth.from(date)
         activeSheet = ActiveSheet.CHECK_IN_SUPPLEMENT
+        analytics.track(
+            if (status == BiteStatus.KEPT) AnalyticsEvent.BITE_KEPT else AnalyticsEvent.BITE_MISSED
+        )
     }
 
     fun recordSnackRefusal() {
@@ -249,6 +274,7 @@ private fun HoldThatBiteApp(activity: Activity) {
         snackRefusals = store.loadSnackRefusals()
         selectedDate = today
         visibleMonth = YearMonth.from(today)
+        analytics.track(AnalyticsEvent.SNACK_REFUSAL_ADDED)
     }
 
     fun undoSnackRefusal() {
@@ -338,8 +364,7 @@ private fun HoldThatBiteApp(activity: Activity) {
                             weightUnit = settings.weightUnit,
                             onRecordWeight = { activeSheet = ActiveSheet.WEIGHT_ONLY },
                             onTargetWeightChanged = { target ->
-                                settings = settings.copy(targetWeightKg = target)
-                                store.saveSettings(settings)
+                                saveSettings(settings.copy(targetWeightKg = target))
                             },
                             onDeleteWeight = { entry ->
                                 store.deleteWeight(entry.timestampMillis)
@@ -395,8 +420,18 @@ private fun HoldThatBiteApp(activity: Activity) {
                                 AppTab.SETTINGS -> SettingsPage(
                                     settings = settings,
                                     onSettingsChanged = {
-                                        settings = it
-                                        store.saveSettings(it)
+                                        val wasWeightTrendEnabled = settings.weightTrendEnabled
+                                        saveSettings(it)
+                                        if (!wasWeightTrendEnabled && it.weightTrendEnabled) {
+                                            analytics.track(AnalyticsEvent.WEIGHT_TREND_ENABLED)
+                                        }
+                                        if (wasWeightTrendEnabled && !it.weightTrendEnabled) {
+                                            analytics.track(AnalyticsEvent.WEIGHT_TREND_DISABLED)
+                                        }
+                                    },
+                                    onPolicyRequested = {
+                                        showPolicyDetails = true
+                                        analytics.track(AnalyticsEvent.PRIVACY_POLICY_OPENED)
                                     },
                                 )
                             }
@@ -406,7 +441,15 @@ private fun HoldThatBiteApp(activity: Activity) {
                     AppBottomNav(
                         visibleTabs = visibleTabs,
                         currentTab = currentTab,
-                        onTabSelected = { currentTab = it },
+                        onTabSelected = { tab ->
+                            if (tab == AppTab.SETTINGS && currentTab != AppTab.SETTINGS) {
+                                analytics.track(AnalyticsEvent.SETTINGS_OPENED)
+                            }
+                            if (tab == AppTab.TREND && currentTab != AppTab.TREND) {
+                                analytics.track(AnalyticsEvent.WEIGHT_TREND_OPENED)
+                            }
+                            currentTab = tab
+                        },
                         modifier = Modifier.navigationBarsPadding(),
                     )
                 }
@@ -423,6 +466,7 @@ private fun HoldThatBiteApp(activity: Activity) {
                             if (value > 0.0 && value < 500.0) {
                                 store.addWeight(WeightEntry(System.currentTimeMillis(), value))
                                 weights = store.loadWeights()
+                                analytics.track(AnalyticsEvent.WEIGHT_RECORD_CREATED)
                             }
                         }
                         activeSheet = null
@@ -452,6 +496,7 @@ private fun HoldThatBiteApp(activity: Activity) {
                         if (entry != null && entry.weightKg > 0.0 && entry.weightKg < 500.0) {
                             store.addWeight(entry)
                             weights = store.loadWeights()
+                            analytics.track(AnalyticsEvent.WEIGHT_RECORD_CREATED)
                         }
                         activeSheet = null
                     },
@@ -495,6 +540,26 @@ private fun HoldThatBiteApp(activity: Activity) {
                         }
                     },
                 )
+            }
+
+            if (showPrivacyDialog) {
+                PrivacyConsentDialog(
+                    onEnableAnalytics = {
+                        showPrivacyDialog = false
+                        saveSettings(settings.copy(privacyPolicyAccepted = true, analyticsEnabled = true))
+                    },
+                    onLocalOnly = {
+                        showPrivacyDialog = false
+                        saveSettings(settings.copy(privacyPolicyAccepted = true, analyticsEnabled = false))
+                    },
+                    onShowPolicy = {
+                        showPolicyDetails = true
+                    },
+                )
+            }
+
+            if (showPolicyDetails) {
+                PrivacyPolicyDialog(onDismiss = { showPolicyDetails = false })
             }
         }
     }
@@ -1757,7 +1822,11 @@ private fun buildWeightHistoryItems(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings) -> Unit) {
+private fun SettingsPage(
+    settings: AppSettings,
+    onSettingsChanged: (AppSettings) -> Unit,
+    onPolicyRequested: () -> Unit,
+) {
     val context = LocalContext.current
 
     Column(
@@ -1825,6 +1894,29 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
             checked = settings.askWeightAfterCheckIn,
             onCheckedChange = { onSettingsChanged(settings.copy(askWeightAfterCheckIn = it)) },
         )
+        SettingSwitch(
+            title = "匿名使用统计",
+            description = "帮助统计打开次数和功能点击，不上传体重、饮食内容或备注。",
+            checked = settings.analyticsEnabled,
+            onCheckedChange = {
+                onSettingsChanged(
+                    settings.copy(
+                        privacyPolicyAccepted = true,
+                        analyticsEnabled = it,
+                    )
+                )
+            },
+        )
+        AppCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "查看隐私政策和用户协议" },
+            onClick = onPolicyRequested,
+        ) {
+            Text("隐私政策 / 用户协议", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text("查看本地数据、匿名统计和友盟 SDK 说明。", color = TextSecondary, fontSize = 13.sp)
+        }
         AppCard(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1837,6 +1929,138 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
             Spacer(Modifier.height(4.dp))
             Text("github.com/KazeLiu/hold-that-bite", color = Primary, fontSize = 13.sp)
         }
+    }
+}
+
+@Composable
+private fun PrivacyConsentDialog(
+    onEnableAnalytics: () -> Unit,
+    onLocalOnly: () -> Unit,
+    onShowPolicy: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { },
+        title = {
+            Text("隐私政策 / 用户协议", fontWeight = FontWeight.ExtraBold)
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "重点说明",
+                    color = Primary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                PrivacyHighlight("不收集精确位置，只允许城市级粗略统计")
+                PrivacyHighlight("不读取应用列表")
+                PrivacyHighlight("不上传体重数值、饮食内容或备注")
+                Text(
+                    "本 App 的打卡、体重和备注数据默认保存在你的设备本地。若你同意开启匿名使用统计，App 会使用友盟 SDK 做统计分析，用于了解打开次数和功能点击情况。",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                )
+                Text(
+                    "友盟 SDK 可能收集设备信息（Android ID、OAID、GUID 等）、网络信息、IP 地址和城市级粗略地域信息；本 App 不申请 GPS / 精确定位权限，不接入应用列表采集能力。",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                )
+                TextButton(onClick = onShowPolicy) {
+                    Text("查看完整说明", color = Primary, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onEnableAnalytics,
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+            ) {
+                Text("同意并开启匿名统计", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onLocalOnly) {
+                Text("暂不开启，仅本地使用", color = TextSecondary)
+            }
+        },
+    )
+}
+
+@Composable
+private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("隐私政策 / 用户协议", fontWeight = FontWeight.ExtraBold)
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "我们不会做这些",
+                    color = Primary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                PrivacyHighlight("不收集精确位置")
+                PrivacyHighlight("不读取应用列表")
+                PrivacyHighlight("不上传体重、饮食、备注等具体内容")
+                PrivacySection(
+                    title = "本地数据",
+                    body = "打卡状态、拒绝零食次数、体重记录、目标体重和备注默认保存在设备本地，用于 App 自身展示。卸载 App 后，这些本地数据可能被系统清除。",
+                )
+                PrivacySection(
+                    title = "匿名使用统计",
+                    body = "开启后仅统计 App 打开、守住了、没守住、拒绝零食、体重趋势开关、趋势页访问、记录体重、打开设置等功能动作，不上报动作里的具体个人内容。",
+                )
+                PrivacySection(
+                    title = "第三方 SDK",
+                    body = "使用 SDK 名称：友盟 SDK。服务类型：统计分析。可能收集个人信息类型：设备信息（Android ID、OAID、GUID 等）、网络信息、IP 地址、城市级粗略地域信息。本 App 不申请 GPS / 精确定位权限，不接入应用列表采集能力。",
+                )
+                TextButton(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(UmengPrivacyPolicyUrl)))
+                    },
+                ) {
+                    Text("查看友盟隐私政策", color = Primary, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+            ) {
+                Text("知道了", fontWeight = FontWeight.Bold)
+            }
+        },
+    )
+}
+
+@Composable
+private fun PrivacyHighlight(text: String) {
+    Text(
+        text = text,
+        color = Missed,
+        fontSize = 17.sp,
+        fontWeight = FontWeight.ExtraBold,
+        lineHeight = 23.sp,
+    )
+}
+
+@Composable
+private fun PrivacySection(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(body, color = TextSecondary, fontSize = 14.sp, lineHeight = 20.sp)
     }
 }
 
