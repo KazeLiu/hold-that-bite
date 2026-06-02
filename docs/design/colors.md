@@ -9,6 +9,12 @@ This project keeps user-facing color choices in named tokens so future Codex wor
 | `ThemeBlue` | `#23ADE5` | Main brand color, primary actions, selected navigation, chart line. |
 | `WeightIncreaseSoft` | `#FBE4E6` | Soft red background for weight increase, highest weight, and related inline/chart emphasis. |
 | `WeightDecreaseSoft` | `#DDF4E5` | Soft green background for weight decrease, lowest weight, and related inline/chart emphasis. |
+| `FastingEase` | `#42A66A` | Green foreground for easier fasting plans such as `12+12` and `14+10`. |
+| `FastingEaseSoft` | `#E1F5E8` | Green soft background for easier fasting-plan chips. |
+| `FastingModerate` | `#D39B23` | Yellow foreground for the standard `16+8` fasting plan. |
+| `FastingModerateSoft` | `#FFF2CD` | Yellow soft background for the standard fasting-plan chip. |
+| `FastingHard` | `#E36F78` | Red foreground for harder fasting plans such as `18+6` and `20+4`. |
+| `FastingHardSoft` | `#FBE1E4` | Red soft background for harder fasting-plan chips. |
 | `CelebrationBlueDeep` | `#1489BC` | Deeper blue for celebratory primary button gradients and victory-card depth. |
 | `CelebrationGold` | `#FFC83D` | Warm confetti accent for check-in success celebrations. |
 | `CelebrationPink` | `#FF8AB3` | Playful confetti accent for check-in success celebrations. |
@@ -23,6 +29,9 @@ This project keeps user-facing color choices in named tokens so future Codex wor
 | `DarkNeutral` | `#22323A` | Night-mode neutral fills and unselected controls. |
 | `DarkWeightIncreaseSoft` | `#4A343A` | Night-mode opaque soft red for highest-weight and missed-state emphasis. |
 | `DarkWeightDecreaseSoft` | `#2F4C3E` | Night-mode opaque soft green for lowest-weight and kept-state emphasis. |
+| `DarkFastingEaseSoft` | `#234638` | Night-mode soft green background for easier fasting-plan chips. |
+| `DarkFastingModerateSoft` | `#4A4025` | Night-mode soft yellow background for the standard fasting-plan chip. |
+| `DarkFastingHardSoft` | `#4A3034` | Night-mode soft red background for harder fasting-plan chips. |
 
 ## Implementation
 

@@ -2403,11 +2403,42 @@ private fun FastingPlanSettingsCard(settings: AppSettings, onSettingsChanged: (A
                 onDismissRequest = { expanded = false },
             ) {
                 FastingPlan.values().forEach { plan ->
+                    val difficultyColor = fastingPlanDifficultyColor(plan)
+                    val difficultySoftColor = fastingPlanDifficultySoftColor(plan)
                     DropdownMenuItem(
                         text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(plan.label, color = TextPrimary, fontWeight = FontWeight.Bold)
-                                Text(plan.description, color = TextSecondary, fontSize = 13.sp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(difficultySoftColor)
+                                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        plan.label,
+                                        color = difficultyColor,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        maxLines = 1,
+                                    )
+                                }
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(
+                                        fastingPlanDifficultyLabel(plan),
+                                        color = difficultyColor,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text(plan.description, color = TextSecondary, fontSize = 13.sp)
+                                }
                             }
                         },
                         onClick = {
@@ -2475,6 +2506,40 @@ private fun FastingPlanSettingsCard(settings: AppSettings, onSettingsChanged: (A
             }
             Text(lastBite.displayText, color = Primary, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
         }
+    }
+}
+
+@Composable
+private fun fastingPlanDifficultyColor(plan: FastingPlan): Color {
+    val palette = LocalAppPalette.current
+    return when (plan) {
+        FastingPlan.TWELVE_TWELVE,
+        FastingPlan.FOURTEEN_TEN -> palette.fastingEase
+        FastingPlan.SIXTEEN_EIGHT -> palette.fastingModerate
+        FastingPlan.EIGHTEEN_SIX,
+        FastingPlan.TWENTY_FOUR -> palette.fastingHard
+    }
+}
+
+@Composable
+private fun fastingPlanDifficultySoftColor(plan: FastingPlan): Color {
+    val palette = LocalAppPalette.current
+    return when (plan) {
+        FastingPlan.TWELVE_TWELVE,
+        FastingPlan.FOURTEEN_TEN -> palette.fastingEaseSoft
+        FastingPlan.SIXTEEN_EIGHT -> palette.fastingModerateSoft
+        FastingPlan.EIGHTEEN_SIX,
+        FastingPlan.TWENTY_FOUR -> palette.fastingHardSoft
+    }
+}
+
+private fun fastingPlanDifficultyLabel(plan: FastingPlan): String {
+    return when (plan) {
+        FastingPlan.TWELVE_TWELVE,
+        FastingPlan.FOURTEEN_TEN -> "轻松"
+        FastingPlan.SIXTEEN_EIGHT -> "标准"
+        FastingPlan.EIGHTEEN_SIX,
+        FastingPlan.TWENTY_FOUR -> "进阶"
     }
 }
 

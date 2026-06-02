@@ -5,9 +5,9 @@ enum class FastingPlan(
     val fastingHours: Int,
     val eatingHours: Int,
 ) {
-    SIXTEEN_EIGHT(label = "16+8", fastingHours = 16, eatingHours = 8),
-    FOURTEEN_TEN(label = "14+10", fastingHours = 14, eatingHours = 10),
     TWELVE_TWELVE(label = "12+12", fastingHours = 12, eatingHours = 12),
+    FOURTEEN_TEN(label = "14+10", fastingHours = 14, eatingHours = 10),
+    SIXTEEN_EIGHT(label = "16+8", fastingHours = 16, eatingHours = 8),
     EIGHTEEN_SIX(label = "18+6", fastingHours = 18, eatingHours = 6),
     TWENTY_FOUR(label = "20+4", fastingHours = 20, eatingHours = 4);
 

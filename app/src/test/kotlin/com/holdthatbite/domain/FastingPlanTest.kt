@@ -23,6 +23,14 @@ class FastingPlanTest {
     }
 
     @Test
+    fun plansAreSortedFromLongestToShortestEatingWindow() {
+        assertEquals(
+            listOf("12+12", "14+10", "16+8", "18+6", "20+4"),
+            FastingPlan.values().map { it.label },
+        )
+    }
+
+    @Test
     fun lastBiteTimeUsesEatingWindow() {
         val result = FastingPlan.SIXTEEN_EIGHT.lastBiteTime(MealTime(hour = 9, minute = 0))
 
