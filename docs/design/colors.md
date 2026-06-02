@@ -14,6 +14,15 @@ This project keeps user-facing color choices in named tokens so future Codex wor
 | `CelebrationPink` | `#FF8AB3` | Playful confetti accent for check-in success celebrations. |
 | `CelebrationMint` | `#8FE0B2` | Fresh confetti accent for check-in success celebrations. |
 | `CelebrationSky` | `#A7DFFF` | Light blue confetti accent for check-in success celebrations. |
+| `DarkBackground` | `#10181D` | Night-mode app background. |
+| `DarkSurface` | `#172329` | Night-mode cards, sheets, bottom navigation, and dialog surfaces. |
+| `DarkSurfaceSubtle` | `#1E2D34` | Night-mode card gradients and subtle grouped rows. |
+| `DarkTextPrimary` | `#EAF7FB` | Night-mode primary text. |
+| `DarkTextSecondary` | `#A7BDC6` | Night-mode secondary text and subdued icons. |
+| `DarkBorder` | `#31464F` | Night-mode borders, dividers, chart grid lines, and empty calendar markers. |
+| `DarkNeutral` | `#22323A` | Night-mode neutral fills and unselected controls. |
+| `DarkWeightIncreaseSoft` | `#4A343A` | Night-mode opaque soft red for highest-weight and missed-state emphasis. |
+| `DarkWeightDecreaseSoft` | `#2F4C3E` | Night-mode opaque soft green for lowest-weight and kept-state emphasis. |
 
 ## Implementation
 
