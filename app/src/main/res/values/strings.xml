@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">守住这口</string>
+    <string name="shortcut_snack_short">拒零食</string>
+    <string name="shortcut_snack_long">拒绝零食 +1</string>
+    <string name="shortcut_kept_short">守住了</string>
+    <string name="shortcut_kept_long">守住了</string>
+    <string name="shortcut_weight_short">记体重</string>
+    <string name="shortcut_weight_long">记录体重</string>
 </resources>
-
