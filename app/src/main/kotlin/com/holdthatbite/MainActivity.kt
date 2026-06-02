@@ -8,6 +8,8 @@ import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -20,6 +22,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -102,6 +105,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -810,8 +814,58 @@ private fun CalendarView(
         BiteCalendar.weekGrid(selectedDate)
     }
     val rows = days.chunked(7)
+    val period = CalendarPeriodView(
+        title = if (settings.calendarMode == CalendarMode.MONTH) {
+            "${visibleMonth.year}年${visibleMonth.monthValue}月"
+        } else {
+            formatWeekTitle(selectedDate)
+        },
+        sortDate = if (settings.calendarMode == CalendarMode.MONTH) {
+            visibleMonth.atDay(1)
+        } else {
+            days.first().date
+        },
+        rows = rows,
+    )
+    val density = LocalDensity.current
+    val swipeThresholdPx = remember(density) { with(density) { 48.dp.toPx() } }
+    var dragOffsetX by remember { mutableStateOf(0f) }
+    val periodTransitionSpec: AnimatedContentTransitionScope<CalendarPeriodView>.() -> ContentTransform = {
+        val forward = targetState.sortDate > initialState.sortDate
+        val enterOffset: (Int) -> Int = { width -> if (forward) width else -width }
+        val exitOffset: (Int) -> Int = { width -> if (forward) -width else width }
+        val motion = tween<androidx.compose.ui.unit.IntOffset>(
+            durationMillis = TabTransitionMillis,
+            easing = FastOutSlowInEasing
+        )
+        val fadeMotion = tween<Float>(
+            durationMillis = TabTransitionMillis,
+            easing = FastOutSlowInEasing
+        )
 
-    AppCard(modifier = modifier.fillMaxWidth()) {
+        (slideInHorizontally(animationSpec = motion, initialOffsetX = enterOffset) +
+            fadeIn(animationSpec = fadeMotion)) togetherWith
+            (slideOutHorizontally(animationSpec = motion, targetOffsetX = exitOffset) +
+                fadeOut(animationSpec = fadeMotion))
+    }
+    val swipeModifier = Modifier.pointerInput(settings.calendarMode, selectedDate, visibleMonth) {
+        detectHorizontalDragGestures(
+            onDragStart = { dragOffsetX = 0f },
+            onHorizontalDrag = { _, dragAmount ->
+                dragOffsetX += dragAmount
+            },
+            onDragCancel = { dragOffsetX = 0f },
+            onDragEnd = {
+                when {
+                    dragOffsetX <= -swipeThresholdPx -> onNext()
+                    dragOffsetX >= swipeThresholdPx -> onPrevious()
+                }
+                dragOffsetX = 0f
+            },
+        )
+    }
+
+    AppCard(modifier = modifier.fillMaxWidth().then(swipeModifier)) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(CalendarCellGap)
@@ -824,18 +878,23 @@ private fun CalendarView(
                         tint = TextPrimary,
                     )
                 }
-                Text(
-                    text = if (settings.calendarMode == CalendarMode.MONTH) {
-                        "${visibleMonth.year}年${visibleMonth.monthValue}月"
-                    } else {
-                        formatWeekTitle(selectedDate)
-                    },
-                    color = TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
+                AnimatedContent(
+                    targetState = period,
+                    transitionSpec = periodTransitionSpec,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clipToBounds(),
+                    label = "calendar-title-transition",
+                ) { target ->
+                    Text(
+                        text = target.title,
+                        color = TextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 IconButton(onClick = onNext, modifier = Modifier.width(48.dp)) {
                     Icon(
                         imageVector = Icons.Filled.ArrowForward,
@@ -847,26 +906,35 @@ private fun CalendarView(
 
             WeekdayRow()
 
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(CalendarCellGap)
+            AnimatedContent(
+                targetState = period,
+                transitionSpec = periodTransitionSpec,
+                modifier = Modifier
+                    .weight(1f)
+                    .clipToBounds(),
+                label = "calendar-grid-transition",
             ) {
-                rows.forEach { row ->
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(CalendarCellGap)
-                    ) {
-                        row.forEach { day ->
-                            CalendarCell(
-                                day = day,
-                                selected = day.date == selectedDate,
-                                record = records[BiteCalendar.dateKey(day.date)],
-                                today = today,
-                                onClick = { onSelectDate(day.date) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                            )
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(CalendarCellGap)
+                ) {
+                    it.rows.forEach { row ->
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(CalendarCellGap)
+                        ) {
+                            row.forEach { day ->
+                                CalendarCell(
+                                    day = day,
+                                    selected = day.date == selectedDate,
+                                    record = records[BiteCalendar.dateKey(day.date)],
+                                    today = today,
+                                    onClick = { onSelectDate(day.date) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                )
+                            }
                         }
                     }
                 }
@@ -874,6 +942,12 @@ private fun CalendarView(
         }
     }
 }
+
+private data class CalendarPeriodView(
+    val title: String,
+    val sortDate: LocalDate,
+    val rows: List<List<CalendarDay>>,
+)
 
 @Composable
 private fun WeekdayRow() {
