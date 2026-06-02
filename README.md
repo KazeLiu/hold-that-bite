@@ -98,4 +98,4 @@ app/build/outputs/apk/release/hold-that-bite-0.4.0-release.apk
 
 ## 首发
 
-程序首发至 [Linux.do](Linux.do) ，如果有好的想法和意见建议，欢迎在社区内反馈或写issus
+程序首发至 [Linux.do](http://www.Linux.do) ，如果有好的想法和意见建议，欢迎在社区内反馈或写issus
