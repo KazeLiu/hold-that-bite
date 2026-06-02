@@ -95,3 +95,7 @@ app/build/outputs/apk/release/hold-that-bite-0.4.0-release.apk
 ## 一句话
 
 限时进食不需要每天都很英勇。这个 App 只是帮你把“今天守住了吗”轻轻记下来。
+
+## 首发
+
+程序首发至 [Linux.do](Linux.do) ，如果有好的想法和意见建议，欢迎在社区内反馈或写issus
