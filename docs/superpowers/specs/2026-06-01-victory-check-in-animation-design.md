@@ -1,30 +1,30 @@
-# Victory Check-In Animation Design
+# 守住了打卡动效设计
 
-## Goal
+## 目标
 
-Make the `守住了` check-in feel like a small win before the user fills note and optional weight fields.
+让用户填写备注和可选体重前，先通过 `守住了` 打卡感受到一次轻量的小胜利。
 
-## Interaction
+## 交互
 
-- Tapping `守住了` triggers a victory emoji burst from the button center.
-- Long pressing `守住了` continuously emits single emoji particles until release and is only a preview of the effect.
-- Releasing after a long press does not record the check-in and does not open the victory card.
-- After tap or release, the note and weight form appears as a victory card rather than a bottom sheet.
-- The victory card rotates once around its vertical center axis while scaling from far to near, then settles in place.
-- The card title uses large glowing `守住了` text with lightweight confetti falling in the title area.
-- Emoji and confetti effects stay away from input fields so the form remains readable.
-- `没守住` keeps the existing supplement bottom sheet and does not use celebration effects.
+- 点击 `守住了` 时，从按钮中心触发一次胜利 emoji 爆发。
+- 长按 `守住了` 时，约 260ms 后开始连续发射单个 emoji 粒子，直到用户松手；长按只作为效果预览。
+- 长按后松手不会记录打卡，也不会打开胜利卡片。
+- 点击触发打卡后，备注和体重表单以胜利卡片形式出现，而不是普通底部弹窗。
+- 胜利卡片从半圈角度旋回正面，同时从远到近缩放，最后稳定停在可读状态。
+- 卡片标题区域使用大号发光 `守住了` 文本，并带有轻量彩纸下落效果。
+- emoji 和彩纸效果应避开输入区域，确保表单内容可读。
+- `没守住` 保持现有补充信息底部弹窗，不使用庆祝动效。
 
-## Timing
+## 时序
 
-- Tap burst: about 18 emojis, cleared before the victory card appears so it does not look like repeated taps.
-- Long press stream: starts after about 260ms, emits one particle about every 90ms with a low active-particle cap to prevent buildup.
-- Card delay: about 360ms after tap, about 300ms after long-press release.
-- Card intro: one 360 degree axis rotation in about 780ms.
+- 点击爆发：约 18 个 emoji；胜利卡片出现时继续保留，让它们自然淡出，避免突然消失。
+- 长按流式发射：约 260ms 后开始，每约 30ms 发射一个随机 emoji，每个 emoji 抛出后逐渐淡出。
+- 卡片延迟：点击后约 360ms 打开卡片。
+- 卡片入场：约 360ms 内完成 180 度轴向旋转。
 
-## Constraints
+## 约束
 
-- Use existing `AppColors` tokens for app-level colors.
-- Keep touch target size at least 48dp.
-- Use transform and alpha animation; avoid layout-shifting animation.
-- Keep changes local to the home check-in flow unless a small helper type is required.
+- 使用现有 `AppColors` token 管理应用级颜色。
+- 触控目标尺寸至少保持 48dp。
+- 使用 transform 和 alpha 动画，避免引发布局跳动。
+- 改动保持在首页打卡流程附近，除非需要非常小的辅助类型。

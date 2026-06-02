@@ -1,62 +1,62 @@
-# Victory Check-In Animation Implementation Plan
+# 守住了打卡动效实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **给 agentic workers：** 必须使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 按任务执行本计划。步骤使用 checkbox（`- [ ]`）语法追踪。
 
-**Goal:** Add the approved `守住了` emoji firework and one-turn victory card animation to the production Android Compose app.
+**目标：** 在生产 Android Compose 应用中加入已确认的 `守住了` emoji 爆发和胜利卡片动效。
 
-**Architecture:** Keep the behavior in `MainActivity.kt` because the current app already keeps screen-level Compose UI there. Add small local models for emoji particles and title confetti, replace only the `守住了` button rendering, and add a new victory-card dialog for kept check-ins while preserving the existing bottom sheet for missed check-ins.
+**架构：** 当前应用的页面级 Compose UI 已经集中在主流程附近，因此动效保持在首页打卡流程内实现。新增小型本地模型承载按钮 emoji 粒子和彩纸参数，替换 `守住了` 按钮渲染，并为守住打卡新增胜利卡片弹窗；`没守住` 继续沿用现有底部补充信息弹窗。
 
-**Tech Stack:** Android Kotlin, Jetpack Compose Material 3, Compose animation, Gradle Android plugin.
+**技术栈：** Android Kotlin、Jetpack Compose Material 3、Compose animation、Gradle Android plugin。
 
 ---
 
-### Task 1: Wire Kept Check-In Celebration
+### 任务 1：接入守住打卡庆祝动效
 
-**Files:**
-- Modify: `app/src/main/kotlin/com/holdthatbite/MainActivity.kt`
+**文件：**
+- 修改：`app/src/main/kotlin/com/holdthatbite/MainActivity.kt`
 
-- [ ] **Step 1: Add animation imports**
+- [ ] **步骤 1：添加动画依赖导入**
 
-Add Compose imports for `Animatable`, `LinearEasing`, `LaunchedEffect`, `mutableStateListOf`, `pointerInput`, `detectTapGestures`, and `Dialog`.
+添加 Compose 动画、手势和弹窗相关 import，例如 `Animatable`、`LinearEasing`、`LaunchedEffect`、`mutableStateListOf`、`pointerInput`、`detectTapGestures` 和 `Dialog`。
 
-- [ ] **Step 2: Add local particle models**
+- [ ] **步骤 2：添加本地粒子模型**
 
-Add immutable data classes for button emoji particles and title confetti specs near the color constants.
+在颜色常量附近添加不可变数据类，用于描述按钮 emoji 粒子和标题彩纸参数。
 
-- [ ] **Step 3: Replace the kept button**
+- [ ] **步骤 3：替换守住按钮**
 
-Replace the existing `Button("守住了")` with a `CelebrationCheckInButton` composable that emits tap and long-press particles before calling `onCheckIn(BiteStatus.KEPT)`.
+将原有 `Button("守住了")` 替换为 `CelebrationCheckInButton` composable，使它能在调用 `onCheckIn(BiteStatus.KEPT)` 前触发点击爆发和长按预览粒子。
 
-### Task 2: Add Victory Card Dialog
+### 任务 2：新增胜利卡片弹窗
 
-**Files:**
-- Modify: `app/src/main/kotlin/com/holdthatbite/MainActivity.kt`
+**文件：**
+- 修改：`app/src/main/kotlin/com/holdthatbite/MainActivity.kt`
 
-- [ ] **Step 1: Route kept records to the new dialog**
+- [ ] **步骤 1：将守住记录路由到新弹窗**
 
-When `activeSheet == CHECK_IN_SUPPLEMENT`, show `VictoryCheckInSupplementDialog` for `BiteStatus.KEPT` and keep `CheckInSupplementSheet` for other statuses.
+当 `activeSheet == CHECK_IN_SUPPLEMENT` 且状态为 `BiteStatus.KEPT` 时，展示 `VictoryCheckInSupplementDialog`；其他状态继续展示 `CheckInSupplementSheet`。
 
-- [ ] **Step 2: Implement one-turn card intro**
+- [ ] **步骤 2：实现半圈卡片入场**
 
-Use an `Animatable` from `0f` to `1f` over `780ms` with linear easing. Map progress to `rotationY = 360f * progress`, `scale = 0.12f + 0.88f * progress`, and opacity.
+使用 `Animatable` 从 `0f` 动画到 `1f`，时长约 `360ms`，缓动使用 `FastOutSlowInEasing`。将进度映射为 `rotationY = 180f * (1f - progress)`、`scale = 0.12f + 0.88f * progress` 和透明度。
 
-- [ ] **Step 3: Add glowing title and falling confetti**
+- [ ] **步骤 3：添加发光标题和彩纸**
 
-Render large `守住了` text centered at the top of the card. Confetti should fall only within the title area and continuously loop while the dialog is visible.
+在卡片顶部居中渲染大号 `守住了` 文本。彩纸只在标题区域内下落，并在弹窗可见期间循环播放。
 
-### Task 3: Verify
+### 任务 3：验证
 
-**Files:**
-- No source changes expected beyond Task 1 and Task 2.
+**文件：**
+- 除任务 1 和任务 2 的源文件改动外，不需要额外源文件改动。
 
-- [ ] **Step 1: Run Gradle tests**
+- [ ] **步骤 1：运行 Gradle 单元测试**
 
-Run: `.\gradlew.bat testDebugUnitTest`
+运行：`.\gradlew.bat testDebugUnitTest`
 
-- [ ] **Step 2: Run debug build**
+- [ ] **步骤 2：运行 debug 构建**
 
-Run: `.\gradlew.bat assembleDebug`
+运行：`.\gradlew.bat assembleDebug`
 
-- [ ] **Step 3: Check emulator install target**
+- [ ] **步骤 3：检查模拟器安装目标**
 
-Check common MuMu ports with `adb devices`; install the debug APK if a MuMu emulator is present.
+通过 `adb devices` 检查常见 MuMu 端口；如果 MuMu 模拟器在线，则安装 debug APK。
