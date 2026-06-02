@@ -19,6 +19,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -49,6 +51,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -57,7 +60,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,6 +99,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -121,6 +128,8 @@ import com.holdthatbite.domain.BiteRecord
 import com.holdthatbite.domain.BiteStatus
 import com.holdthatbite.domain.CalendarDay
 import com.holdthatbite.domain.CalendarMode
+import com.holdthatbite.domain.FastingPlan
+import com.holdthatbite.domain.MealTime
 import com.holdthatbite.domain.WeightEntry
 import com.holdthatbite.domain.WeightUnit
 import com.holdthatbite.domain.WeightTrend
@@ -131,6 +140,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.WeekFields
@@ -176,6 +186,11 @@ private val Missed = AppColors.StatusMissed
 private val MissedSoft = AppColors.WeightIncreaseSoft
 private val Neutral = AppColors.Neutral
 private const val TabTransitionMillis = 240
+private val HomeFixedActionsFallbackPadding = 118.dp
+private val HomeFixedActionsGap = 10.dp
+private val HomeMonthCalendarHeight = 336.dp
+private val HomeWeekCalendarHeight = 188.dp
+private val CalendarCellGap = 8.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,12 +198,14 @@ private fun HoldThatBiteApp(activity: Activity) {
     val store = remember { BiteStore(activity) }
     var settings by remember { mutableStateOf(store.loadSettings()) }
     var records by remember { mutableStateOf(store.loadRecords()) }
+    var snackRefusals by remember { mutableStateOf(store.loadSnackRefusals()) }
     var weights by remember { mutableStateOf(store.loadWeights()) }
     var currentTab by remember { mutableStateOf(AppTab.HOME) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var visibleMonth by remember { mutableStateOf(YearMonth.now()) }
     var activeSheet by remember { mutableStateOf<ActiveSheet?>(null) }
     var pendingRecord by remember { mutableStateOf<BiteRecord?>(null) }
+    var confirmMissedDate by remember { mutableStateOf<LocalDate?>(null) }
 
     val visibleTabs = if (settings.weightTrendEnabled) {
         listOf(AppTab.TREND, AppTab.HOME, AppTab.SETTINGS)
@@ -197,6 +214,39 @@ private fun HoldThatBiteApp(activity: Activity) {
     }
     if (currentTab == AppTab.TREND && !settings.weightTrendEnabled) {
         currentTab = AppTab.HOME
+    }
+
+    fun recordCheckIn(date: LocalDate, status: BiteStatus) {
+        val key = BiteCalendar.dateKey(date)
+        val record = BiteRecord(
+            dateKey = key,
+            status = status,
+            note = records[key]?.note.orEmpty(),
+        )
+        store.upsertRecord(record)
+        records = store.loadRecords()
+        pendingRecord = record
+        selectedDate = date
+        visibleMonth = YearMonth.from(date)
+        activeSheet = ActiveSheet.CHECK_IN_SUPPLEMENT
+    }
+
+    fun recordSnackRefusal() {
+        val today = LocalDate.now()
+        val key = BiteCalendar.dateKey(today)
+        store.incrementSnackRefusal(key)
+        snackRefusals = store.loadSnackRefusals()
+        selectedDate = today
+        visibleMonth = YearMonth.from(today)
+    }
+
+    fun undoSnackRefusal() {
+        val today = LocalDate.now()
+        val key = BiteCalendar.dateKey(today)
+        store.undoSnackRefusal(key)
+        snackRefusals = store.loadSnackRefusals()
+        selectedDate = today
+        visibleMonth = YearMonth.from(today)
     }
 
     MaterialTheme(
@@ -261,6 +311,7 @@ private fun HoldThatBiteApp(activity: Activity) {
                                 AppTab.HOME -> HomePage(
                                     settings = settings,
                                     records = records,
+                                    snackRefusals = snackRefusals,
                                     weights = weights,
                                     selectedDate = selectedDate,
                                     visibleMonth = visibleMonth,
@@ -286,25 +337,22 @@ private fun HoldThatBiteApp(activity: Activity) {
                                         selectedDate = it
                                         visibleMonth = YearMonth.from(it)
                                     },
-                                    onCheckIn = { status ->
-                                        val today = LocalDate.now()
-                                        val key = BiteCalendar.dateKey(today)
-                                        val record = BiteRecord(
-                                            dateKey = key,
-                                            status = status,
-                                            note = records[key]?.note.orEmpty(),
-                                        )
-                                        store.upsertRecord(record)
-                                        records = store.loadRecords()
-                                        pendingRecord = record
-                                        selectedDate = today
-                                        visibleMonth = YearMonth.from(today)
-                                        activeSheet = ActiveSheet.CHECK_IN_SUPPLEMENT
+                                    onCheckIn = { date, status ->
+                                        val key = BiteCalendar.dateKey(date)
+                                        if (status == BiteStatus.MISSED && records[key]?.status == BiteStatus.KEPT) {
+                                            selectedDate = date
+                                            visibleMonth = YearMonth.from(date)
+                                            confirmMissedDate = date
+                                        } else {
+                                            recordCheckIn(date, status)
+                                        }
                                     },
                                     onEditNote = { record ->
                                         pendingRecord = record
                                         activeSheet = ActiveSheet.NOTE_EDIT
                                     },
+                                    onSnackRefusal = ::recordSnackRefusal,
+                                    onUndoSnackRefusal = ::undoSnackRefusal,
                                 )
                                 AppTab.SETTINGS -> SettingsPage(
                                     settings = settings,
@@ -387,6 +435,29 @@ private fun HoldThatBiteApp(activity: Activity) {
                 )
                 null -> Unit
             }
+
+            confirmMissedDate?.let { date ->
+                AlertDialog(
+                    onDismissRequest = { confirmMissedDate = null },
+                    title = { Text("是不是不小心吃了？") },
+                    text = { Text("辛苦了，能坚持到这里已经很不容易了。要把这天改成没守住吗？") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                confirmMissedDate = null
+                                recordCheckIn(date, BiteStatus.MISSED)
+                            }
+                        ) {
+                            Text("是，改成没守住", color = Missed)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmMissedDate = null }) {
+                            Text("先保留守住了", color = TextSecondary)
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -395,50 +466,140 @@ private fun HoldThatBiteApp(activity: Activity) {
 private fun HomePage(
     settings: AppSettings,
     records: Map<String, BiteRecord>,
+    snackRefusals: Map<String, Int>,
     weights: List<WeightEntry>,
     selectedDate: LocalDate,
     visibleMonth: YearMonth,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSelectDate: (LocalDate) -> Unit,
-    onCheckIn: (BiteStatus) -> Unit,
+    onCheckIn: (LocalDate, BiteStatus) -> Unit,
     onEditNote: (BiteRecord) -> Unit,
+    onSnackRefusal: () -> Unit,
+    onUndoSnackRefusal: () -> Unit,
 ) {
-    Column(
+    val today = LocalDate.now()
+    val now = LocalTime.now()
+    val firstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
+    val nowMealTime = MealTime(now.hour, now.minute)
+    val inEatingWindow = settings.fastingPlan.isEatingWindow(firstMeal, nowMealTime)
+    val lastBiteTime = settings.fastingPlan.lastBiteTime(firstMeal)
+    val selectedRecord = records[BiteCalendar.dateKey(selectedDate)]
+    val showFinalCheckInActions = selectedDate.isBefore(today) || (selectedDate == today && !inEatingWindow)
+    val showEatingWindowHint = selectedDate == today && inEatingWindow
+    val selectedSnackRefusalCount = snackRefusals[BiteCalendar.dateKey(selectedDate)] ?: 0
+    val todaySnackRefusalCount = snackRefusals[BiteCalendar.dateKey(today)] ?: 0
+    val density = LocalDensity.current
+    var fixedActionsHeightPx by remember { mutableStateOf(0) }
+    val fixedActionsPadding = if (fixedActionsHeightPx > 0) {
+        with(density) { fixedActionsHeightPx.toDp() } + HomeFixedActionsGap
+    } else {
+        HomeFixedActionsFallbackPadding
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        HeaderBlock(
-            title = "守住这口",
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = fixedActionsPadding),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            HeaderBlock(
+                title = "守住这口",
+            )
 
-        CalendarView(
-            settings = settings,
-            records = records,
-            selectedDate = selectedDate,
-            visibleMonth = visibleMonth,
-            onPrevious = onPrevious,
-            onNext = onNext,
-            onSelectDate = onSelectDate,
-            modifier = Modifier.height(if (settings.calendarMode == CalendarMode.MONTH) 304.dp else 178.dp),
-        )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CalendarView(
+                    settings = settings,
+                    records = records,
+                    today = today,
+                    selectedDate = selectedDate,
+                    visibleMonth = visibleMonth,
+                    onPrevious = onPrevious,
+                    onNext = onNext,
+                    onSelectDate = onSelectDate,
+                    modifier = Modifier.height(
+                        if (settings.calendarMode == CalendarMode.MONTH) {
+                            HomeMonthCalendarHeight
+                        } else {
+                            HomeWeekCalendarHeight
+                        }
+                    ),
+                )
 
-        DaySummary(
-            selectedDate = selectedDate,
-            record = records[BiteCalendar.dateKey(selectedDate)],
-            weightSummary = if (settings.weightTrendEnabled) buildWeightDaySummary(selectedDate, weights) else null,
-            weightUnit = settings.weightUnit,
-            onEditNote = onEditNote,
-        )
+                DaySummary(
+                    selectedDate = selectedDate,
+                    record = selectedRecord,
+                    effectiveStatus = effectiveBiteStatus(selectedDate, selectedRecord, today),
+                    softDefaultKept = isSoftDefaultKept(selectedDate, selectedRecord, today),
+                    snackRefusalCount = selectedSnackRefusalCount,
+                    weightSummary = if (settings.weightTrendEnabled) buildWeightDaySummary(selectedDate, weights) else null,
+                    weightUnit = settings.weightUnit,
+                    onEditNote = onEditNote,
+                )
+            }
+        }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { fixedActionsHeightPx = it.height },
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SnackRefusalAction(
+                count = todaySnackRefusalCount,
+                onAdd = onSnackRefusal,
+                onUndo = onUndoSnackRefusal,
+            )
 
-        CelebrationCheckInActions(
-            onMissed = { onCheckIn(BiteStatus.MISSED) },
-            onKept = { onCheckIn(BiteStatus.KEPT) },
-        )
+            when {
+                showFinalCheckInActions -> CelebrationCheckInActions(
+                    onMissed = { onCheckIn(selectedDate, BiteStatus.MISSED) },
+                    onKept = { onCheckIn(selectedDate, BiteStatus.KEPT) },
+                )
+                showEatingWindowHint -> EatingWindowHint(
+                    lastBiteText = lastBiteTime.displayText,
+                    planLabel = settings.fastingPlan.label,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EatingWindowHint(lastBiteText: String, planLabel: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Neutral)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("现在是正常吃饭时间", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(3.dp))
+                Text("$lastBiteText 后回来记录今天有没有守住", color = TextSecondary, fontSize = 13.sp)
+            }
+            Text(planLabel, color = Primary, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+        }
     }
 }
 
@@ -446,6 +607,7 @@ private fun HomePage(
 private fun CalendarView(
     settings: AppSettings,
     records: Map<String, BiteRecord>,
+    today: LocalDate,
     selectedDate: LocalDate,
     visibleMonth: YearMonth,
     onPrevious: () -> Unit,
@@ -463,7 +625,7 @@ private fun CalendarView(
     AppCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(CalendarCellGap)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPrevious, modifier = Modifier.width(48.dp)) {
@@ -498,18 +660,19 @@ private fun CalendarView(
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(CalendarCellGap)
             ) {
                 rows.forEach { row ->
                     Row(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(CalendarCellGap)
                     ) {
                         row.forEach { day ->
                             CalendarCell(
                                 day = day,
                                 selected = day.date == selectedDate,
                                 record = records[BiteCalendar.dateKey(day.date)],
+                                today = today,
                                 onClick = { onSelectDate(day.date) },
                                 modifier = Modifier
                                     .weight(1f)
@@ -525,7 +688,7 @@ private fun CalendarView(
 
 @Composable
 private fun WeekdayRow() {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(CalendarCellGap)) {
         listOf("一", "二", "三", "四", "五", "六", "日").forEach {
             Text(
                 text = it,
@@ -544,29 +707,35 @@ private fun CalendarCell(
     day: CalendarDay,
     selected: Boolean,
     record: BiteRecord?,
+    today: LocalDate,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val fill = when (record?.status) {
+    val effectiveStatus = effectiveBiteStatus(day.date, record, today)
+    val softDefaultKept = isSoftDefaultKept(day.date, record, today)
+    val fill = when (effectiveStatus) {
         BiteStatus.KEPT -> SuccessSoft
         BiteStatus.MISSED -> MissedSoft
         null -> Neutral
     }
-    val statusColor = when (record?.status) {
+    val statusColor = when (effectiveStatus) {
         BiteStatus.KEPT -> Success
         BiteStatus.MISSED -> Missed
         null -> Color.Transparent
     }
     val textColor = when {
         !day.inCurrentPeriod -> TextSecondary.copy(alpha = 0.45f)
-        record?.status == BiteStatus.KEPT -> Success
-        record?.status == BiteStatus.MISSED -> Missed
+        effectiveStatus == BiteStatus.KEPT -> Success
+        effectiveStatus == BiteStatus.MISSED -> Missed
         else -> TextPrimary
     }
-    val description = when (record?.status) {
+    val description = when {
+        softDefaultKept -> "${day.date.monthValue}月${day.date.dayOfMonth}日，默认守住了"
+        else -> when (effectiveStatus) {
         BiteStatus.KEPT -> "${day.date.monthValue}月${day.date.dayOfMonth}日，守住了"
         BiteStatus.MISSED -> "${day.date.monthValue}月${day.date.dayOfMonth}日，没守住"
         null -> "${day.date.monthValue}月${day.date.dayOfMonth}日，未记录"
+        }
     }
 
     Box(
@@ -590,30 +759,45 @@ private fun CalendarCell(
                 modifier = Modifier
                     .size(if (record == null) 4.dp else 7.dp)
                     .clip(CircleShape)
-                    .background(if (record == null) Border else statusColor)
+                    .background(if (record == null && !softDefaultKept) Border else statusColor.copy(alpha = if (softDefaultKept) 0.65f else 1f))
             )
         }
     }
+}
+
+private fun effectiveBiteStatus(date: LocalDate, record: BiteRecord?, today: LocalDate): BiteStatus? {
+    return record?.status ?: if (date.isBefore(today)) BiteStatus.KEPT else null
+}
+
+private fun isSoftDefaultKept(date: LocalDate, record: BiteRecord?, today: LocalDate): Boolean {
+    return record == null && date.isBefore(today)
 }
 
 @Composable
 private fun DaySummary(
     selectedDate: LocalDate,
     record: BiteRecord?,
+    effectiveStatus: BiteStatus?,
+    softDefaultKept: Boolean,
+    snackRefusalCount: Int,
     weightSummary: WeightDaySummary?,
     weightUnit: WeightUnit,
     onEditNote: (BiteRecord) -> Unit,
 ) {
     val today = LocalDate.now()
-    val statusText = when (record?.status) {
+    val statusText = when {
+        softDefaultKept -> "默认守住了"
+        else -> when (effectiveStatus) {
         BiteStatus.KEPT -> "这天守住了"
         BiteStatus.MISSED -> "这天没守住"
         null -> "这天还没记录"
+        }
     }
     val defaultNote = when {
         selectedDate.isAfter(today) -> "这天还没来，放轻松"
-        record?.status == BiteStatus.KEPT -> "今天真棒！这么难的事情也做到了！"
-        record?.status == BiteStatus.MISSED -> "今天辛苦了，多吃点也没关系"
+        softDefaultKept -> "没有打卡也先算守住；如果那天没守住，可以回头改。"
+        effectiveStatus == BiteStatus.KEPT -> "今天真棒！这么难的事情也做到了！"
+        effectiveStatus == BiteStatus.MISSED -> "今天辛苦了，多吃点也没关系"
         else -> "没有记录，非常轻松"
     }
     val note = record?.note?.takeIf { it.isNotBlank() } ?: defaultNote
@@ -643,12 +827,18 @@ private fun DaySummary(
                     WeightSummaryLabel(summary = it, weightUnit = weightUnit)
                 }
             }
+            if (snackRefusalCount > 0) {
+                Text(
+                    "拒绝零食 $snackRefusalCount 次",
+                    color = Success,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             Text(
                 note,
                 color = TextSecondary,
                 fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -1526,11 +1716,13 @@ private fun buildWeightHistoryItems(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -1547,6 +1739,10 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
                 }
             }
         }
+        FastingPlanSettingsCard(
+            settings = settings,
+            onSettingsChanged = onSettingsChanged,
+        )
         SettingSwitch(
             title = "体重趋势",
             description = "开启后底部出现趋势页；默认隐藏。",
@@ -1575,6 +1771,118 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
             checked = settings.askWeightAfterCheckIn,
             onCheckedChange = { onSettingsChanged(settings.copy(askWeightAfterCheckIn = it)) },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FastingPlanSettingsCard(settings: AppSettings, onSettingsChanged: (AppSettings) -> Unit) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    val firstMeal = MealTime(hour = settings.firstMealHour, minute = settings.firstMealMinute)
+    val lastBite = settings.fastingPlan.lastBiteTime(firstMeal)
+
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Text("减肥安排", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text("选好进食窗口，再定第一餐时间。", color = TextSecondary, fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                value = settings.fastingPlan.label,
+                onValueChange = {},
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                readOnly = true,
+                label = { Text("当前安排") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                shape = RoundedCornerShape(18.dp),
+                singleLine = true,
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                FastingPlan.values().forEach { plan ->
+                    DropdownMenuItem(
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(plan.label, color = TextPrimary, fontWeight = FontWeight.Bold)
+                                Text(plan.description, color = TextSecondary, fontSize = 13.sp)
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            onSettingsChanged(settings.copy(fastingPlan = plan))
+                        },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(settings.fastingPlan.description, color = TextSecondary, fontSize = 13.sp)
+
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("第一餐时间", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(3.dp))
+                Text("默认上午 09:00，可按你的作息调整。", color = TextSecondary, fontSize = 13.sp)
+            }
+            OutlinedButton(
+                onClick = {
+                    TimePickerDialog(
+                        context,
+                        { _, hour, minute ->
+                            onSettingsChanged(
+                                settings.copy(
+                                    firstMealHour = hour,
+                                    firstMealMinute = minute,
+                                )
+                            )
+                        },
+                        settings.firstMealHour,
+                        settings.firstMealMinute,
+                        true,
+                    ).show()
+                },
+                modifier = Modifier
+                    .height(48.dp)
+                    .width(104.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+            ) {
+                Text(firstMeal.displayText, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Neutral)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("最后一口时间", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(3.dp))
+                Text("按 ${settings.fastingPlan.label} 自动计算。", color = TextSecondary, fontSize = 13.sp)
+            }
+            Text(lastBite.displayText, color = Primary, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        }
     }
 }
 

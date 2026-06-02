@@ -21,6 +21,9 @@ enum class WeightUnit(val label: String, private val displayPerKg: Double) {
 
 data class AppSettings(
     val calendarMode: CalendarMode = CalendarMode.MONTH,
+    val fastingPlan: FastingPlan = FastingPlan.SIXTEEN_EIGHT,
+    val firstMealHour: Int = 9,
+    val firstMealMinute: Int = 0,
     val weightTrendEnabled: Boolean = false,
     val askWeightAfterCheckIn: Boolean = false,
     val targetWeightKg: Double? = null,

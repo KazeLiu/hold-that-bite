@@ -26,14 +26,19 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +58,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -61,6 +67,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,6 +86,12 @@ private const val KeptLongPressStartMillis = 260L
 private const val KeptLongPressIntervalMillis = 30L
 private const val VictoryCardIntroMillis = 360
 private const val MaxStreamParticles = 96
+
+private enum class ButtonEmojiParticleStyle {
+    KEPT_TAP,
+    KEPT_STREAM,
+    SNACK_TAP
+}
 
 private data class ButtonEmojiParticle(
     val id: Long,
@@ -126,27 +139,28 @@ internal fun CelebrationCheckInActions(
         val contentWidth = maxWidth - gap
         val missedWidth = contentWidth * (1f / totalWeight)
         val keptWidth = contentWidth * (1.45f / totalWeight)
+        val keptLeftX = missedWidth + gap
         val keptOriginX = missedWidth + gap + keptWidth / 2f
         val keptOriginY = 28.dp
 
-        fun spawnParticles(count: Int, streaming: Boolean) {
-            if (!streaming) {
+        fun spawnParticles(count: Int, style: ButtonEmojiParticleStyle, originX: Float = keptOriginX.value, originY: Float = keptOriginY.value) {
+            if (style != ButtonEmojiParticleStyle.KEPT_STREAM) {
                 Log.d(CelebrationLogTag, "spawn tap count=$count activeBefore=${particles.size}")
             }
-            if (streaming && particles.size >= MaxStreamParticles) {
+            if (style == ButtonEmojiParticleStyle.KEPT_STREAM && particles.size >= MaxStreamParticles) {
                 Log.d(CelebrationLogTag, "stream skip active=${particles.size}")
                 return
             }
-            if (!streaming) {
+            if (style != ButtonEmojiParticleStyle.KEPT_STREAM) {
                 particles.clear()
             }
             repeat(count) {
                 particles.add(
                     buildButtonEmojiParticle(
                         id = nextParticleId++,
-                        originX = keptOriginX.value,
-                        originY = keptOriginY.value,
-                        streaming = streaming,
+                        originX = originX,
+                        originY = originY,
+                        style = style,
                     )
                 )
             }
@@ -164,15 +178,22 @@ internal fun CelebrationCheckInActions(
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.StatusMissed)
             ) {
-                Text("没守住", fontWeight = FontWeight.SemiBold)
+                Text("🍜 没守住", fontWeight = FontWeight.SemiBold)
             }
             KeptCelebrationButton(
                 pressing = keptPressing,
                 actionPending = keptActionPending,
                 onPressingChanged = { keptPressing = it },
                 onActionPendingChanged = { keptActionPending = it },
-                onTapBurst = { spawnParticles(18, streaming = false) },
-                onLongPressBurst = { spawnParticles(1, streaming = true) },
+                onTapBurst = { spawnParticles(34, ButtonEmojiParticleStyle.KEPT_TAP) },
+                onLongPressBurst = { localX, localY ->
+                    spawnParticles(
+                        count = 1,
+                        style = ButtonEmojiParticleStyle.KEPT_STREAM,
+                        originX = keptLeftX.value + localX,
+                        originY = localY,
+                    )
+                },
                 onKept = {
                     Log.d(CelebrationLogTag, "show victory card with activeParticles=${particles.size}")
                     onKept()
@@ -203,10 +224,11 @@ private fun KeptCelebrationButton(
     onPressingChanged: (Boolean) -> Unit,
     onActionPendingChanged: (Boolean) -> Unit,
     onTapBurst: () -> Unit,
-    onLongPressBurst: () -> Unit,
+    onLongPressBurst: (Float, Float) -> Unit,
     onKept: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val pressScale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (pressing) 0.965f else 1f,
@@ -221,18 +243,12 @@ private fun KeptCelebrationButton(
                 scaleY = pressScale
             }
             .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        AppColors.ThemeBlue.copy(alpha = 0.92f),
-                        AppColors.ThemeBlue,
-                        AppColors.CelebrationBlueDeep,
-                    )
-                )
-            )
+            .background(AppColors.ThemeBlue)
             .pointerInput(actionPending, onKept) {
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var pressOriginX = with(density) { down.position.x.toDp().value }
+                    var pressOriginY = with(density) { down.position.y.toDp().value }
                     Log.d(CelebrationLogTag, "down actionPending=$actionPending")
                     if (actionPending) {
                         waitUntilReleased()
@@ -248,14 +264,20 @@ private fun KeptCelebrationButton(
                         longPressStarted = true
                         Log.d(CelebrationLogTag, "long preview start")
                         while (true) {
-                            onLongPressBurst()
+                            onLongPressBurst(pressOriginX, pressOriginY)
                             longPressTicks += 1
                             delay(KeptLongPressIntervalMillis)
                         }
                     }
 
                     try {
-                        waitUntilReleased()
+                        val releasedInside = waitUntilReleasedOrOutside(down.id) { position ->
+                            pressOriginX = with(density) { position.x.toDp().value }
+                            pressOriginY = with(density) { position.y.toDp().value }
+                        }
+                        if (!releasedInside) {
+                            Log.d(CelebrationLogTag, "release simulated by leaving button bounds")
+                        }
                     } finally {
                         longPressJob.cancel()
                         onPressingChanged(false)
@@ -263,7 +285,7 @@ private fun KeptCelebrationButton(
 
                     if (longPressStarted) {
                         Log.d(CelebrationLogTag, "long preview release ticks=$longPressTicks no action")
-                    } else {
+                    } else if (pressOriginX >= 0f && pressOriginY >= 0f) {
                         Log.d(CelebrationLogTag, "tap release -> single burst and delayed action")
                         onActionPendingChanged(true)
                         onTapBurst()
@@ -273,30 +295,15 @@ private fun KeptCelebrationButton(
                             onKept()
                             onActionPendingChanged(false)
                         }
+                    } else {
+                        Log.d(CelebrationLogTag, "tap canceled outside button bounds")
                     }
                 }
             }
             .semantics { contentDescription = "守住了" },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 5.dp)
-                .fillMaxWidth(0.72f)
-                .height(15.dp)
-                .clip(RoundedCornerShape(99.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.42f),
-                            Color.Transparent,
-                        )
-                    )
-                )
-        )
-        Text("守住了", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text("🛡️ 守住了", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -337,6 +344,93 @@ private fun ButtonEmojiParticleView(
                 rotationZ = particle.rotation * value
             }
     )
+}
+
+@Composable
+internal fun SnackRefusalAction(
+    count: Int,
+    onAdd: () -> Unit,
+    onUndo: () -> Unit,
+) {
+    val particles = remember { mutableStateListOf<ButtonEmojiParticle>() }
+    var nextParticleId by remember { mutableLongStateOf(0L) }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val buttonOriginX = maxWidth * 0.64f
+        val buttonOriginY = 26.dp
+
+        fun spawnSnackParticles() {
+            particles.clear()
+            repeat(9) {
+                particles.add(
+                    buildButtonEmojiParticle(
+                        id = nextParticleId++,
+                        originX = buttonOriginX.value,
+                        originY = buttonOriginY.value,
+                        style = ButtonEmojiParticleStyle.SNACK_TAP,
+                    )
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = AppColors.SurfaceSubtle,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    if (count > 0) "小胜利 $count 次" else "还没小胜利",
+                    color = if (count > 0) AppColors.StatusKept else AppColors.TextSecondary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    onClick = {
+                        spawnSnackParticles()
+                        onAdd()
+                    },
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.ThemeBlue)
+                ) {
+                    Text("🚫 拒绝零食 +1", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                if (count > 0) {
+                    IconButton(
+                        onClick = onUndo,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Undo,
+                            contentDescription = "撤销一次拒绝零食",
+                            tint = AppColors.TextSecondary,
+                        )
+                    }
+                }
+            }
+        }
+
+        particles.forEach { particle ->
+            key(particle.id) {
+                ButtonEmojiParticleView(
+                    particle = particle,
+                    onFinished = { finishedId ->
+                        particles.removeAll { it.id == finishedId }
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -581,23 +675,32 @@ private fun TitleConfettiRain(visibleAlpha: Float) {
     }
 }
 
-private fun buildButtonEmojiParticle(id: Long, originX: Float, originY: Float, streaming: Boolean): ButtonEmojiParticle {
-    val emojis = listOf("🎉", "✨", "🌟", "💪", "🥳", "🔥", "💙", "⭐")
-    val angleDegrees = if (streaming) {
-        -90f + Random.nextFloat() * 96f - 48f
-    } else {
-        Random.nextFloat() * 360f
+private fun buildButtonEmojiParticle(
+    id: Long,
+    originX: Float,
+    originY: Float,
+    style: ButtonEmojiParticleStyle,
+): ButtonEmojiParticle {
+    val emojis = when (style) {
+        ButtonEmojiParticleStyle.KEPT_TAP -> listOf("🎉", "✨", "🌟", "💪", "🥳", "🔥", "💙", "⭐", "🚀", "🏆", "🛡️", "💥")
+        ButtonEmojiParticleStyle.KEPT_STREAM -> listOf("🎉", "✨", "🌟", "💪", "🥳", "🔥", "💙", "⭐")
+        ButtonEmojiParticleStyle.SNACK_TAP -> listOf("✨", "⭐", "💪", "🍵", "🚫", "💙")
+    }
+    val angleDegrees = when (style) {
+        ButtonEmojiParticleStyle.KEPT_TAP -> Random.nextFloat() * 360f
+        ButtonEmojiParticleStyle.KEPT_STREAM -> -90f + Random.nextFloat() * 96f - 48f
+        ButtonEmojiParticleStyle.SNACK_TAP -> -90f + Random.nextFloat() * 130f - 65f
     }
     val angleRadians = Math.toRadians(angleDegrees.toDouble())
-    val distance = if (streaming) {
-        96f + Random.nextFloat() * 124f
-    } else {
-        86f + Random.nextFloat() * 170f
+    val distance = when (style) {
+        ButtonEmojiParticleStyle.KEPT_TAP -> 124f + Random.nextFloat() * 224f
+        ButtonEmojiParticleStyle.KEPT_STREAM -> 96f + Random.nextFloat() * 124f
+        ButtonEmojiParticleStyle.SNACK_TAP -> 46f + Random.nextFloat() * 94f
     }
-    val liftBias = if (streaming) {
-        -48f - Random.nextFloat() * 50f
-    } else {
-        -20f - Random.nextFloat() * 34f
+    val liftBias = when (style) {
+        ButtonEmojiParticleStyle.KEPT_TAP -> -28f - Random.nextFloat() * 52f
+        ButtonEmojiParticleStyle.KEPT_STREAM -> -48f - Random.nextFloat() * 50f
+        ButtonEmojiParticleStyle.SNACK_TAP -> -24f - Random.nextFloat() * 36f
     }
     val rotationDirection = if (Random.nextBoolean()) 1f else -1f
     return ButtonEmojiParticle(
@@ -607,11 +710,31 @@ private fun buildButtonEmojiParticle(id: Long, originX: Float, originY: Float, s
         originY = originY + Random.nextFloat() * 14f - 7f,
         dx = kotlin.math.cos(angleRadians).toFloat() * distance,
         dy = kotlin.math.sin(angleRadians).toFloat() * distance + liftBias,
-        rotation = rotationDirection * (80f + Random.nextFloat() * 230f),
-        scale = 0.72f + Random.nextFloat() * 0.72f,
-        sizeSp = if (streaming) 19 + Random.nextInt(10) else 20 + Random.nextInt(15),
-        durationMillis = if (streaming) 980 + Random.nextInt(420) else 560 + Random.nextInt(140),
-        fadeStart = if (streaming) 0.36f else 0.72f,
+        rotation = rotationDirection * when (style) {
+            ButtonEmojiParticleStyle.KEPT_TAP -> 140f + Random.nextFloat() * 320f
+            ButtonEmojiParticleStyle.KEPT_STREAM -> 80f + Random.nextFloat() * 230f
+            ButtonEmojiParticleStyle.SNACK_TAP -> 50f + Random.nextFloat() * 160f
+        },
+        scale = when (style) {
+            ButtonEmojiParticleStyle.KEPT_TAP -> 0.82f + Random.nextFloat() * 0.82f
+            ButtonEmojiParticleStyle.KEPT_STREAM -> 0.72f + Random.nextFloat() * 0.72f
+            ButtonEmojiParticleStyle.SNACK_TAP -> 0.62f + Random.nextFloat() * 0.48f
+        },
+        sizeSp = when (style) {
+            ButtonEmojiParticleStyle.KEPT_TAP -> 21 + Random.nextInt(16)
+            ButtonEmojiParticleStyle.KEPT_STREAM -> 19 + Random.nextInt(10)
+            ButtonEmojiParticleStyle.SNACK_TAP -> 18 + Random.nextInt(8)
+        },
+        durationMillis = when (style) {
+            ButtonEmojiParticleStyle.KEPT_TAP -> 620 + Random.nextInt(220)
+            ButtonEmojiParticleStyle.KEPT_STREAM -> 980 + Random.nextInt(420)
+            ButtonEmojiParticleStyle.SNACK_TAP -> 520 + Random.nextInt(160)
+        },
+        fadeStart = when (style) {
+            ButtonEmojiParticleStyle.KEPT_STREAM -> 0.36f
+            ButtonEmojiParticleStyle.SNACK_TAP -> 0.66f
+            ButtonEmojiParticleStyle.KEPT_TAP -> 0.72f
+        },
     )
 }
 
@@ -619,4 +742,24 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.wai
     do {
         val event = awaitPointerEvent()
     } while (event.changes.any { it.pressed })
+}
+
+private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.waitUntilReleasedOrOutside(
+    pointerId: PointerId,
+    onPositionChanged: (Offset) -> Unit,
+): Boolean {
+    while (true) {
+        val event = awaitPointerEvent()
+        val change = event.changes.firstOrNull { it.id == pointerId } ?: return false
+        if (!change.pressed) {
+            return true
+        }
+
+        val position = change.position
+        onPositionChanged(position)
+        if (position.x < 0f || position.y < 0f || position.x > size.width || position.y > size.height) {
+            onPositionChanged(Offset(x = -1f, y = -1f))
+            return false
+        }
+    }
 }

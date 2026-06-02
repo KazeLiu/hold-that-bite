@@ -5,6 +5,8 @@ import com.holdthatbite.domain.AppSettings
 import com.holdthatbite.domain.BiteRecord
 import com.holdthatbite.domain.BiteStatus
 import com.holdthatbite.domain.CalendarMode
+import com.holdthatbite.domain.FastingPlan
+import com.holdthatbite.domain.SnackRefusalCounter
 import com.holdthatbite.domain.WeightEntry
 import com.holdthatbite.domain.WeightUnit
 import org.json.JSONArray
@@ -20,9 +22,18 @@ class BiteStore(context: Context) {
         val weightUnit = runCatching {
             WeightUnit.valueOf(preferences.getString(KEY_WEIGHT_UNIT, WeightUnit.KG.name) ?: WeightUnit.KG.name)
         }.getOrDefault(WeightUnit.KG)
+        val fastingPlan = runCatching {
+            FastingPlan.valueOf(
+                preferences.getString(KEY_FASTING_PLAN, FastingPlan.SIXTEEN_EIGHT.name)
+                    ?: FastingPlan.SIXTEEN_EIGHT.name
+            )
+        }.getOrDefault(FastingPlan.SIXTEEN_EIGHT)
 
         return AppSettings(
             calendarMode = mode,
+            fastingPlan = fastingPlan,
+            firstMealHour = preferences.getInt(KEY_FIRST_MEAL_HOUR, 9).coerceIn(0, 23),
+            firstMealMinute = preferences.getInt(KEY_FIRST_MEAL_MINUTE, 0).coerceIn(0, 59),
             weightTrendEnabled = preferences.getBoolean(KEY_WEIGHT_TREND_ENABLED, false),
             askWeightAfterCheckIn = preferences.getBoolean(KEY_ASK_WEIGHT_AFTER_CHECK_IN, false),
             targetWeightKg = preferences.getString(KEY_TARGET_WEIGHT_KG, null)?.toDoubleOrNull(),
@@ -33,6 +44,9 @@ class BiteStore(context: Context) {
     fun saveSettings(settings: AppSettings) {
         val editor = preferences.edit()
             .putString(KEY_CALENDAR_MODE, settings.calendarMode.name)
+            .putString(KEY_FASTING_PLAN, settings.fastingPlan.name)
+            .putInt(KEY_FIRST_MEAL_HOUR, settings.firstMealHour.coerceIn(0, 23))
+            .putInt(KEY_FIRST_MEAL_MINUTE, settings.firstMealMinute.coerceIn(0, 59))
             .putBoolean(KEY_WEIGHT_TREND_ENABLED, settings.weightTrendEnabled)
             .putBoolean(KEY_ASK_WEIGHT_AFTER_CHECK_IN, settings.askWeightAfterCheckIn)
             .putString(KEY_WEIGHT_UNIT, settings.weightUnit.name)
@@ -92,6 +106,39 @@ class BiteStore(context: Context) {
         saveWeights(loadWeights().filterNot { it.timestampMillis == timestampMillis })
     }
 
+    fun loadSnackRefusals(): Map<String, Int> {
+        val array = JSONArray(preferences.getString(KEY_SNACK_REFUSALS, "[]") ?: "[]")
+        val counts = linkedMapOf<String, Int>()
+
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val dateKey = item.optString("dateKey")
+            val count = item.optInt("count", 0)
+            if (dateKey.isNotBlank() && count > 0) {
+                counts[dateKey] = count
+            }
+        }
+
+        return counts
+    }
+
+    fun incrementSnackRefusal(dateKey: String) {
+        val counts = loadSnackRefusals().toMutableMap()
+        counts[dateKey] = SnackRefusalCounter.increment(counts[dateKey] ?: 0)
+        saveSnackRefusals(counts)
+    }
+
+    fun undoSnackRefusal(dateKey: String) {
+        val counts = loadSnackRefusals().toMutableMap()
+        val nextCount = SnackRefusalCounter.decrement(counts[dateKey] ?: 0)
+        if (nextCount == 0) {
+            counts.remove(dateKey)
+        } else {
+            counts[dateKey] = nextCount
+        }
+        saveSnackRefusals(counts)
+    }
+
     private fun saveRecords(records: List<BiteRecord>) {
         val array = JSONArray()
         records.forEach { record ->
@@ -117,13 +164,31 @@ class BiteStore(context: Context) {
         preferences.edit().putString(KEY_WEIGHTS, array.toString()).apply()
     }
 
+    private fun saveSnackRefusals(counts: Map<String, Int>) {
+        val array = JSONArray()
+        counts.toSortedMap().forEach { (dateKey, count) ->
+            if (count > 0) {
+                array.put(
+                    JSONObject()
+                        .put("dateKey", dateKey)
+                        .put("count", count)
+                )
+            }
+        }
+        preferences.edit().putString(KEY_SNACK_REFUSALS, array.toString()).apply()
+    }
+
     private companion object {
         const val KEY_CALENDAR_MODE = "calendar_mode"
+        const val KEY_FASTING_PLAN = "fasting_plan"
+        const val KEY_FIRST_MEAL_HOUR = "first_meal_hour"
+        const val KEY_FIRST_MEAL_MINUTE = "first_meal_minute"
         const val KEY_WEIGHT_TREND_ENABLED = "weight_trend_enabled"
         const val KEY_ASK_WEIGHT_AFTER_CHECK_IN = "ask_weight_after_check_in"
         const val KEY_TARGET_WEIGHT_KG = "target_weight_kg"
         const val KEY_WEIGHT_UNIT = "weight_unit"
         const val KEY_RECORDS = "records"
         const val KEY_WEIGHTS = "weights"
+        const val KEY_SNACK_REFUSALS = "snack_refusals"
     }
 }
