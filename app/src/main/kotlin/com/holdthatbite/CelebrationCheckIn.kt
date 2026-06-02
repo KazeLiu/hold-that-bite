@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -75,9 +76,9 @@ import kotlin.random.Random
 private const val CelebrationLogTag = "HTB-Celebration"
 private const val KeptActionDelayMillis = 360L
 private const val KeptLongPressStartMillis = 260L
-private const val KeptLongPressIntervalMillis = 90L
-private const val VictoryCardIntroMillis = 780
-private const val MaxButtonParticles = 24
+private const val KeptLongPressIntervalMillis = 30L
+private const val VictoryCardIntroMillis = 360
+private const val MaxStreamParticles = 96
 
 private data class ButtonEmojiParticle(
     val id: Long,
@@ -90,6 +91,7 @@ private data class ButtonEmojiParticle(
     val scale: Float,
     val sizeSp: Int,
     val durationMillis: Int,
+    val fadeStart: Float,
 )
 
 private data class TitleConfettiSpec(
@@ -131,10 +133,14 @@ internal fun CelebrationCheckInActions(
             if (!streaming) {
                 Log.d(CelebrationLogTag, "spawn tap count=$count activeBefore=${particles.size}")
             }
+            if (streaming && particles.size >= MaxStreamParticles) {
+                Log.d(CelebrationLogTag, "stream skip active=${particles.size}")
+                return
+            }
+            if (!streaming) {
+                particles.clear()
+            }
             repeat(count) {
-                if (particles.size >= MaxButtonParticles) {
-                    particles.removeAt(0)
-                }
                 particles.add(
                     buildButtonEmojiParticle(
                         id = nextParticleId++,
@@ -168,8 +174,7 @@ internal fun CelebrationCheckInActions(
                 onTapBurst = { spawnParticles(18, streaming = false) },
                 onLongPressBurst = { spawnParticles(1, streaming = true) },
                 onKept = {
-                    Log.d(CelebrationLogTag, "clear particles before victory card active=${particles.size}")
-                    particles.clear()
+                    Log.d(CelebrationLogTag, "show victory card with activeParticles=${particles.size}")
                     onKept()
                 },
                 modifier = Modifier
@@ -179,12 +184,14 @@ internal fun CelebrationCheckInActions(
         }
 
         particles.forEach { particle ->
-            ButtonEmojiParticleView(
-                particle = particle,
-                onFinished = { finishedId ->
-                    particles.removeAll { it.id == finishedId }
-                },
-            )
+            key(particle.id) {
+                ButtonEmojiParticleView(
+                    particle = particle,
+                    onFinished = { finishedId ->
+                        particles.removeAll { it.id == finishedId }
+                    },
+                )
+            }
         }
     }
 }
@@ -312,7 +319,7 @@ private fun ButtonEmojiParticleView(
     val value = progress.value
     val alpha = when {
         value < 0.12f -> value / 0.12f
-        value > 0.74f -> ((1f - value) / 0.26f).coerceIn(0f, 1f)
+        value > particle.fadeStart -> ((1f - value) / (1f - particle.fadeStart)).coerceIn(0f, 1f)
         else -> 1f
     }
     Text(
@@ -348,7 +355,7 @@ internal fun VictoryCheckInSupplementDialog(
         intro.snapTo(0f)
         intro.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = VictoryCardIntroMillis, easing = LinearEasing),
+            animationSpec = tween(durationMillis = VictoryCardIntroMillis, easing = FastOutSlowInEasing),
         )
     }
 
@@ -410,7 +417,7 @@ private fun VictorySupplementCard(
             .padding(bottom = 58.dp)
             .graphicsLayer {
                 alpha = cardAlpha
-                rotationY = 360f * progress
+                rotationY = 180f * (1f - progress)
                 scaleX = scale
                 scaleY = scale
                 cameraDistance = 12f * density.density
@@ -603,7 +610,8 @@ private fun buildButtonEmojiParticle(id: Long, originX: Float, originY: Float, s
         rotation = rotationDirection * (80f + Random.nextFloat() * 230f),
         scale = 0.72f + Random.nextFloat() * 0.72f,
         sizeSp = if (streaming) 19 + Random.nextInt(10) else 20 + Random.nextInt(15),
-        durationMillis = if (streaming) 520 + Random.nextInt(170) else 560 + Random.nextInt(140),
+        durationMillis = if (streaming) 980 + Random.nextInt(420) else 560 + Random.nextInt(140),
+        fadeStart = if (streaming) 0.36f else 0.72f,
     )
 }
 
