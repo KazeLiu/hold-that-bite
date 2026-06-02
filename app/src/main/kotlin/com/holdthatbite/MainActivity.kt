@@ -412,7 +412,6 @@ private fun HomePage(
     ) {
         HeaderBlock(
             title = "守住这口",
-            subtitle = "今天只看进食窗口，别的都先放轻一点。",
         )
 
         CalendarView(
@@ -871,7 +870,7 @@ private fun TrendPage(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            HeaderBlock("体重趋势", "只画曲线，不做评价。")
+            HeaderBlock("体重趋势")
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1535,7 +1534,7 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        HeaderBlock("设置", "把可能带来压力的功能都放在这里。")
+        HeaderBlock("设置")
         AppCard(modifier = Modifier.fillMaxWidth()) {
             Text("日历显示模式", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
@@ -1576,11 +1575,6 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
             checked = settings.askWeightAfterCheckIn,
             onCheckedChange = { onSettingsChanged(settings.copy(askWeightAfterCheckIn = it)) },
         )
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Text("提醒", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text("第一版先不做复杂提醒。后续可以加一个温和的小提示。", color = TextSecondary, fontSize = 13.sp)
-        }
     }
 }
 
@@ -1763,11 +1757,9 @@ private fun NavIconButton(tab: AppTab, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HeaderBlock(title: String, subtitle: String) {
+private fun HeaderBlock(title: String) {
     Column {
         Text(title, color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(2.dp))
-        Text(subtitle, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
