@@ -77,16 +77,20 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,6 +106,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -111,7 +116,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.LimitLine
 import com.github.mikephil.charting.components.XAxis
@@ -130,9 +135,11 @@ import com.holdthatbite.domain.CalendarDay
 import com.holdthatbite.domain.CalendarMode
 import com.holdthatbite.domain.FastingPlan
 import com.holdthatbite.domain.MealTime
+import com.holdthatbite.domain.ThemeMode
 import com.holdthatbite.domain.WeightEntry
 import com.holdthatbite.domain.WeightUnit
 import com.holdthatbite.domain.WeightTrend
+import com.holdthatbite.ui.AppColorPalette
 import com.holdthatbite.ui.AppColors
 import com.holdthatbite.ui.CheckInSupplement
 import com.holdthatbite.ui.WeightChartModel
@@ -173,18 +180,19 @@ private enum class ActiveSheet {
     NOTE_EDIT
 }
 
-private val Primary = AppColors.ThemeBlue
-private val Background = AppColors.Background
-private val SurfaceColor = AppColors.Surface
-private val SurfaceSubtle = AppColors.SurfaceSubtle
-private val TextPrimary = AppColors.TextPrimary
-private val TextSecondary = AppColors.TextSecondary
-private val Border = AppColors.Border
-private val Success = AppColors.StatusKept
-private val SuccessSoft = AppColors.WeightDecreaseSoft
-private val Missed = AppColors.StatusMissed
-private val MissedSoft = AppColors.WeightIncreaseSoft
-private val Neutral = AppColors.Neutral
+private val LocalAppPalette = staticCompositionLocalOf { AppColors.LightPalette }
+private val Primary: Color @Composable get() = LocalAppPalette.current.primary
+private val Background: Color @Composable get() = LocalAppPalette.current.background
+private val SurfaceColor: Color @Composable get() = LocalAppPalette.current.surface
+private val SurfaceSubtle: Color @Composable get() = LocalAppPalette.current.surfaceSubtle
+private val TextPrimary: Color @Composable get() = LocalAppPalette.current.textPrimary
+private val TextSecondary: Color @Composable get() = LocalAppPalette.current.textSecondary
+private val Border: Color @Composable get() = LocalAppPalette.current.border
+private val Success: Color @Composable get() = LocalAppPalette.current.success
+private val SuccessSoft: Color @Composable get() = LocalAppPalette.current.successSoft
+private val Missed: Color @Composable get() = LocalAppPalette.current.missed
+private val MissedSoft: Color @Composable get() = LocalAppPalette.current.missedSoft
+private val Neutral: Color @Composable get() = LocalAppPalette.current.neutral
 private const val TabTransitionMillis = 240
 private val HomeFixedActionsFallbackPadding = 118.dp
 private val HomeFixedActionsGap = 10.dp
@@ -249,15 +257,42 @@ private fun HoldThatBiteApp(activity: Activity) {
         visibleMonth = YearMonth.from(today)
     }
 
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Primary,
-            background = Background,
-            surface = SurfaceColor,
-            onSurface = TextPrimary,
+    val useDarkTheme = settings.themeMode.shouldUseDarkTheme(isSystemInDarkTheme())
+    val palette = if (useDarkTheme) AppColors.DarkPalette else AppColors.LightPalette
+    val colorScheme = if (useDarkTheme) {
+        darkColorScheme(
+            primary = palette.primary,
+            background = palette.background,
+            surface = palette.surface,
+            surfaceVariant = palette.surfaceSubtle,
+            onSurface = palette.textPrimary,
+            onSurfaceVariant = palette.textSecondary,
+            outline = palette.border,
         )
-    ) {
-        Surface(color = Background, modifier = Modifier.fillMaxSize()) {
+    } else {
+        lightColorScheme(
+            primary = palette.primary,
+            background = palette.background,
+            surface = palette.surface,
+            surfaceVariant = palette.surfaceSubtle,
+            onSurface = palette.textPrimary,
+            onSurfaceVariant = palette.textSecondary,
+            outline = palette.border,
+        )
+    }
+
+    SideEffect {
+        activity.window.statusBarColor = android.graphics.Color.TRANSPARENT
+        activity.window.navigationBarColor = palette.surface.toArgb()
+        WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+            isAppearanceLightStatusBars = !useDarkTheme
+            isAppearanceLightNavigationBars = !useDarkTheme
+        }
+    }
+
+    CompositionLocalProvider(LocalAppPalette provides palette) {
+        MaterialTheme(colorScheme = colorScheme) {
+            Surface(color = Background, modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier
@@ -459,6 +494,7 @@ private fun HoldThatBiteApp(activity: Activity) {
                 )
             }
         }
+    }
     }
 }
 
@@ -1217,6 +1253,7 @@ private fun WeightChart(
     val model = remember(weights) { WeightChartModel.from(weights) }
     var selectedIndex by remember(weights) { mutableStateOf<Int?>(null) }
     val dateFormat = remember { SimpleDateFormat("M/d HH:mm", Locale.CHINA) }
+    val chartPalette = LocalAppPalette.current
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         when (model) {
             WeightChartModel.Empty -> {
@@ -1254,6 +1291,7 @@ private fun WeightChart(
                                 dateFormat = dateFormat,
                                 targetWeightKg = targetWeightKg,
                                 weightUnit = weightUnit,
+                                palette = chartPalette,
                                 onSelected = { selectedIndex = it },
                             )
                         }
@@ -1264,6 +1302,7 @@ private fun WeightChart(
                             dateFormat = dateFormat,
                             targetWeightKg = targetWeightKg,
                             weightUnit = weightUnit,
+                            palette = chartPalette,
                             onSelected = { selectedIndex = it },
                         )
                     }
@@ -1278,21 +1317,23 @@ private fun LineChart.configureWeightLineChart(
     dateFormat: SimpleDateFormat,
     targetWeightKg: Double?,
     weightUnit: WeightUnit,
+    palette: AppColorPalette,
     onSelected: (Int) -> Unit,
 ) {
     val lineEntries = entries.mapIndexed { index, entry ->
         Entry(index.toFloat(), weightUnit.toDisplay(entry.weightKg).toFloat())
     }
     val dataSet = LineDataSet(lineEntries, "体重").apply {
-        color = android.graphics.Color.rgb(35, 173, 229)
+        color = palette.primary.toArgb()
         lineWidth = 2.4f
         setDrawCircles(false)
         valueTextSize = 0f
         setDrawValues(false)
         mode = LineDataSet.Mode.CUBIC_BEZIER
         setDrawFilled(true)
-        fillDrawable = ContextCompat.getDrawable(context, R.drawable.weight_chart_fill)
-        highLightColor = android.graphics.Color.rgb(32, 49, 58)
+        fillColor = palette.primary.toArgb()
+        fillAlpha = 68
+        highLightColor = palette.textPrimary.toArgb()
         setDrawHorizontalHighlightIndicator(false)
     }
     val extremes = WeightExtremes.from(entries)
@@ -1300,6 +1341,8 @@ private fun LineChart.configureWeightLineChart(
     description.isEnabled = false
     legend.isEnabled = false
     setNoDataText("还没有记录，想记的时候再记。")
+    setNoDataTextColor(palette.textSecondary.toArgb())
+    setBackgroundColor(android.graphics.Color.TRANSPARENT)
     setTouchEnabled(true)
     isDragEnabled = true
     isScaleXEnabled = true
@@ -1312,8 +1355,8 @@ private fun LineChart.configureWeightLineChart(
     axisRight.isEnabled = false
     axisLeft.apply {
         removeAllLimitLines()
-        textColor = android.graphics.Color.rgb(116, 132, 140)
-        gridColor = android.graphics.Color.rgb(217, 235, 242)
+        textColor = palette.textSecondary.toArgb()
+        gridColor = palette.border.toArgb()
         axisLineColor = android.graphics.Color.TRANSPARENT
         setDrawAxisLine(false)
         valueFormatter = object : ValueFormatter() {
@@ -1342,14 +1385,14 @@ private fun LineChart.configureWeightLineChart(
                 weightExtremeLimitLine(
                     label = "目标 ${formatWeight(target, weightUnit)}",
                     value = weightUnit.toDisplay(target).toFloat(),
-                    color = Primary.toArgb(),
+                    color = palette.primary.toArgb(),
                 )
             )
         }
     }
     xAxis.apply {
         position = XAxis.XAxisPosition.BOTTOM
-        textColor = android.graphics.Color.rgb(116, 132, 140)
+        textColor = palette.textSecondary.toArgb()
         gridColor = android.graphics.Color.TRANSPARENT
         axisLineColor = android.graphics.Color.TRANSPARENT
         granularity = 1f
@@ -1446,8 +1489,8 @@ private fun WeightHistoryRow(
         }
     )
     val rowColor = when (emphasis) {
-        WeightEmphasis.Highest -> AppColors.WeightIncreaseSoft
-        WeightEmphasis.Lowest -> AppColors.WeightDecreaseSoft
+        WeightEmphasis.Highest -> MissedSoft
+        WeightEmphasis.Lowest -> SuccessSoft
         WeightEmphasis.None -> Neutral
     }
 
@@ -1727,6 +1770,19 @@ private fun SettingsPage(settings: AppSettings, onSettingsChanged: (AppSettings)
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         HeaderBlock("设置")
+        AppCard(modifier = Modifier.fillMaxWidth()) {
+            Text("显示模式", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text("晚上打卡可以切夜间，也可以跟随手机自动切换。", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ThemeMode.values().forEach { mode ->
+                    ModeButton(mode.label, settings.themeMode == mode) {
+                        onSettingsChanged(settings.copy(themeMode = mode))
+                    }
+                }
+            }
+        }
         AppCard(modifier = Modifier.fillMaxWidth()) {
             Text("日历显示模式", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))

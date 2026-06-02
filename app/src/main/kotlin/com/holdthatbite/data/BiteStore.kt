@@ -7,6 +7,7 @@ import com.holdthatbite.domain.BiteStatus
 import com.holdthatbite.domain.CalendarMode
 import com.holdthatbite.domain.FastingPlan
 import com.holdthatbite.domain.SnackRefusalCounter
+import com.holdthatbite.domain.ThemeMode
 import com.holdthatbite.domain.WeightEntry
 import com.holdthatbite.domain.WeightUnit
 import org.json.JSONArray
@@ -28,6 +29,9 @@ class BiteStore(context: Context) {
                     ?: FastingPlan.SIXTEEN_EIGHT.name
             )
         }.getOrDefault(FastingPlan.SIXTEEN_EIGHT)
+        val themeMode = runCatching {
+            ThemeMode.valueOf(preferences.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name)
+        }.getOrDefault(ThemeMode.SYSTEM)
 
         return AppSettings(
             calendarMode = mode,
@@ -38,6 +42,7 @@ class BiteStore(context: Context) {
             askWeightAfterCheckIn = preferences.getBoolean(KEY_ASK_WEIGHT_AFTER_CHECK_IN, false),
             targetWeightKg = preferences.getString(KEY_TARGET_WEIGHT_KG, null)?.toDoubleOrNull(),
             weightUnit = weightUnit,
+            themeMode = themeMode,
         )
     }
 
@@ -50,6 +55,7 @@ class BiteStore(context: Context) {
             .putBoolean(KEY_WEIGHT_TREND_ENABLED, settings.weightTrendEnabled)
             .putBoolean(KEY_ASK_WEIGHT_AFTER_CHECK_IN, settings.askWeightAfterCheckIn)
             .putString(KEY_WEIGHT_UNIT, settings.weightUnit.name)
+            .putString(KEY_THEME_MODE, settings.themeMode.name)
         if (settings.targetWeightKg == null) {
             editor.remove(KEY_TARGET_WEIGHT_KG)
         } else {
@@ -187,6 +193,7 @@ class BiteStore(context: Context) {
         const val KEY_ASK_WEIGHT_AFTER_CHECK_IN = "ask_weight_after_check_in"
         const val KEY_TARGET_WEIGHT_KG = "target_weight_kg"
         const val KEY_WEIGHT_UNIT = "weight_unit"
+        const val KEY_THEME_MODE = "theme_mode"
         const val KEY_RECORDS = "records"
         const val KEY_WEIGHTS = "weights"
         const val KEY_SNACK_REFUSALS = "snack_refusals"

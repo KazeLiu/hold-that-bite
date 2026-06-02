@@ -10,6 +10,20 @@ enum class CalendarMode {
     WEEK
 }
 
+enum class ThemeMode(val label: String) {
+    SYSTEM("跟随手机"),
+    LIGHT("浅色"),
+    DARK("夜间");
+
+    fun shouldUseDarkTheme(systemInDarkTheme: Boolean): Boolean {
+        return when (this) {
+            SYSTEM -> systemInDarkTheme
+            LIGHT -> false
+            DARK -> true
+        }
+    }
+}
+
 enum class WeightUnit(val label: String, private val displayPerKg: Double) {
     KG(label = "kg", displayPerKg = 1.0),
     JIN(label = "斤", displayPerKg = 2.0);
@@ -28,6 +42,7 @@ data class AppSettings(
     val askWeightAfterCheckIn: Boolean = false,
     val targetWeightKg: Double? = null,
     val weightUnit: WeightUnit = WeightUnit.KG,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
 )
 
 data class BiteRecord(

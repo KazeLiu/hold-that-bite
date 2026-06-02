@@ -36,6 +36,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -376,7 +377,7 @@ internal fun SnackRefusalAction(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
-            color = AppColors.SurfaceSubtle,
+            color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
             Row(
                 modifier = Modifier
@@ -387,7 +388,7 @@ internal fun SnackRefusalAction(
             ) {
                 Text(
                     if (count > 0) "小胜利 $count 次" else "还没小胜利",
-                    color = if (count > 0) AppColors.StatusKept else AppColors.TextSecondary,
+                    color = if (count > 0) AppColors.StatusKept else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -413,7 +414,7 @@ internal fun SnackRefusalAction(
                         Icon(
                             imageVector = Icons.Filled.Undo,
                             contentDescription = "撤销一次拒绝零食",
-                            tint = AppColors.TextSecondary,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -460,7 +461,7 @@ internal fun VictoryCheckInSupplementDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(AppColors.TextPrimary.copy(alpha = 0.18f))
+                .background(Color.Black.copy(alpha = 0.52f))
                 .imePadding()
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 24.dp),
@@ -504,6 +505,7 @@ private fun VictorySupplementCard(
     val density = LocalDensity.current
     val scale = 0.12f + (0.88f * progress)
     val cardAlpha = (progress / 0.1f).coerceIn(0f, 1f)
+    val victoryTint = AppColors.StatusKept.copy(alpha = 0.22f)
 
     Card(
         modifier = Modifier
@@ -517,7 +519,7 @@ private fun VictorySupplementCard(
                 cameraDistance = 12f * density.density
             },
         shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 18.dp),
     ) {
         Column(
@@ -525,9 +527,9 @@ private fun VictorySupplementCard(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            AppColors.WeightDecreaseSoft.copy(alpha = 0.32f),
-                            AppColors.SurfaceSubtle,
-                            AppColors.Surface,
+                            victoryTint,
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.surface,
                         )
                     )
                 )
@@ -560,7 +562,7 @@ private fun VictorySupplementCard(
             Text(
                 text = "漂亮！这一口你赢下来了，把今天的小胜利记下来。",
                 modifier = Modifier.fillMaxWidth(),
-                color = AppColors.TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 textAlign = TextAlign.Center,
@@ -585,7 +587,7 @@ private fun VictorySupplementCard(
                         Text(if (weightUnit == WeightUnit.JIN) "体重，例如 125，可跳过" else "体重，例如 62.5，可跳过")
                     },
                     trailingIcon = {
-                        Text(weightUnit.label, color = AppColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+                        Text(weightUnit.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                     },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -598,7 +600,7 @@ private fun VictorySupplementCard(
                         .height(46.dp)
                         .weight(1f),
                     shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.TextSecondary)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 ) {
                     Text("先跳过")
                 }
