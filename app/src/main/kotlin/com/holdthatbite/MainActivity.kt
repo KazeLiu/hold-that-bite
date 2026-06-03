@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrendingUp
@@ -253,6 +254,9 @@ private fun HoldThatBiteApp(
     var showPrivacyDialog by remember { mutableStateOf(!settings.privacyPolicyAccepted) }
     var showPolicyDetails by remember { mutableStateOf(false) }
     var showShortcutEncouragement by remember { mutableStateOf(false) }
+    var showOnboardingGuide by remember {
+        mutableStateOf(settings.privacyPolicyAccepted && !settings.onboardingGuideShown)
+    }
     var appOpenTracked by remember { mutableStateOf(false) }
     var pendingImportPayload by remember { mutableStateOf<BiteBackupPayload?>(null) }
 
@@ -319,6 +323,10 @@ private fun HoldThatBiteApp(
 
     LaunchedEffect(settings.weightTrendEnabled) {
         LauncherShortcuts.publishDynamic(activity, settings)
+    }
+
+    LaunchedEffect(settings.privacyPolicyAccepted, settings.onboardingGuideShown) {
+        showOnboardingGuide = settings.privacyPolicyAccepted && !settings.onboardingGuideShown
     }
 
     val visibleTabs = if (settings.weightTrendEnabled) {
@@ -744,6 +752,21 @@ private fun HoldThatBiteApp(
                     },
                     onShowPolicy = {
                         showPolicyDetails = true
+                    },
+                )
+            }
+
+            if (!showPrivacyDialog && showOnboardingGuide) {
+                OnboardingGuideDialog(
+                    onOpenSettings = {
+                        showOnboardingGuide = false
+                        saveSettings(settings.copy(onboardingGuideShown = true))
+                        currentTab = AppTab.SETTINGS
+                        analytics.track(AnalyticsEvent.SETTINGS_OPENED)
+                    },
+                    onDismiss = {
+                        showOnboardingGuide = false
+                        saveSettings(settings.copy(onboardingGuideShown = true))
                     },
                 )
             }
@@ -1190,6 +1213,12 @@ private fun DaySummary(
                     color = Success,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "这些都算数，风宝已经帮你记下啦。",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                 )
             }
             Text(
@@ -2099,6 +2128,11 @@ private fun SettingsPage(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         HeaderBlock("设置")
+        PhilosophyCard()
+        FastingPlanSettingsCard(
+            settings = settings,
+            onSettingsChanged = onSettingsChanged,
+        )
         AppCard(modifier = Modifier.fillMaxWidth()) {
             Text("显示模式", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
@@ -2124,10 +2158,6 @@ private fun SettingsPage(
                 }
             }
         }
-        FastingPlanSettingsCard(
-            settings = settings,
-            onSettingsChanged = onSettingsChanged,
-        )
         SettingSwitch(
             title = "体重趋势",
             description = "开启后底部出现趋势页；默认隐藏。",
@@ -2231,6 +2261,108 @@ private fun SettingsPage(
             Spacer(Modifier.height(4.dp))
             Text("github.com/KazeLiu/hold-that-bite", color = Primary, fontSize = 13.sp)
         }
+    }
+}
+
+@Composable
+private fun PhilosophyCard() {
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Restaurant,
+                    contentDescription = null,
+                    tint = Primary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("理念", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(3.dp))
+                Text("轻轻记下今天", color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "守住这口不要求你每天都完美。先选好自己的进食窗口，到了禁食窗口后，再把今天标成守住了或没守住。",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            lineHeight = 21.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "拒绝零食可以多多点：路过便利店没进去，打开外卖又关掉，拿起饼干又放回去，心里很想吃但最后忍住了，都值得点一下。每一下都不是小题大做，都是你把今天往前推了一点点。",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            lineHeight = 21.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "它只是一个轻量日历，陪你把真实过程留下来。没守住也不是失败，记下来，明天风宝再陪你重新开始。",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            lineHeight = 21.sp,
+        )
+    }
+}
+
+@Composable
+private fun OnboardingGuideDialog(
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("先把计划定下来吧", fontWeight = FontWeight.ExtraBold)
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "欢迎来守住这口。它不会要求你变得很英勇，只帮你记三件小事：今天的进食窗口、有没有守住、以及那些忍住零食的小小胜利。",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                )
+                OnboardingGuidePoint("第一步", "去设置里选择 16+8、14+10 或适合你的禁食计划。")
+                OnboardingGuidePoint("每天", "想吃零食时，忍住一次就点一次拒绝零食；少买一包、少拆一袋、少吃一口，都可以多多记录。")
+                OnboardingGuidePoint("收尾", "进入禁食窗口后，轻轻点一下守住了；没守住也可以诚实记下。")
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onOpenSettings,
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+            ) {
+                Text("去设置计划", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("先逛逛", color = TextSecondary)
+            }
+        },
+    )
+}
+
+@Composable
+private fun OnboardingGuidePoint(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, color = Primary, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+        Text(body, color = TextSecondary, fontSize = 14.sp, lineHeight = 20.sp)
     }
 }
 

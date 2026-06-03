@@ -26,6 +26,7 @@ class BiteBackupCodecTest {
         assertEquals(1780416000000L, json.getLong("exportedAtMillis"))
         assertEquals("WEEK", json.getJSONObject("settings").getString("calendarMode"))
         assertEquals("FOURTEEN_TEN", json.getJSONObject("settings").getString("fastingPlan"))
+        assertTrue(json.getJSONObject("settings").getBoolean("onboardingGuideShown"))
         assertEquals("2026-06-02", json.getJSONArray("records").getJSONObject(0).getString("dateKey"))
         assertEquals(62.5, json.getJSONArray("weights").getJSONObject(0).getDouble("weightKg"), 0.0001)
         assertEquals(3, json.getJSONArray("snackRefusals").getJSONObject(0).getInt("count"))
@@ -49,6 +50,7 @@ class BiteBackupCodecTest {
         assertEquals(ThemeMode.DARK, decoded.settings.themeMode)
         assertTrue(decoded.settings.privacyPolicyAccepted)
         assertFalse(decoded.settings.analyticsEnabled)
+        assertTrue(decoded.settings.onboardingGuideShown)
         assertEquals(BiteRecord("2026-06-02", BiteStatus.KEPT, "守住"), decoded.records.single())
         assertEquals(WeightEntry(1780416000000L, 62.5), decoded.weights.single())
         assertEquals(3, decoded.snackRefusals["2026-06-02"])
@@ -110,6 +112,7 @@ class BiteBackupCodecTest {
         assertEquals(AppSettings().themeMode, decoded.settings.themeMode)
         assertTrue(decoded.settings.privacyPolicyAccepted)
         assertTrue(decoded.settings.analyticsEnabled)
+        assertFalse(decoded.settings.onboardingGuideShown)
         assertEquals(listOf(BiteRecord("2026-06-04", BiteStatus.MISSED, "ok")), decoded.records)
         assertEquals(listOf(WeightEntry(1780588800000L, 63.1)), decoded.weights)
         assertEquals(mapOf("2026-06-03" to 2), decoded.snackRefusals)
@@ -130,6 +133,7 @@ class BiteBackupCodecTest {
                 themeMode = ThemeMode.DARK,
                 privacyPolicyAccepted = true,
                 analyticsEnabled = false,
+                onboardingGuideShown = true,
             ),
             records = listOf(BiteRecord("2026-06-02", BiteStatus.KEPT, "守住")),
             weights = listOf(WeightEntry(1780416000000L, 62.5)),

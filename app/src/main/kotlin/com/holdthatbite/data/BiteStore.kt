@@ -65,6 +65,7 @@ class BiteStore(context: Context) {
             themeMode = themeMode,
             privacyPolicyAccepted = preferences.getBoolean(KEY_PRIVACY_POLICY_ACCEPTED, false),
             analyticsEnabled = preferences.getBoolean(KEY_ANALYTICS_ENABLED, false),
+            onboardingGuideShown = preferences.getBoolean(KEY_ONBOARDING_GUIDE_SHOWN, false),
         )
     }
 
@@ -80,6 +81,7 @@ class BiteStore(context: Context) {
             .putString(KEY_THEME_MODE, settings.themeMode.name)
             .putBoolean(KEY_PRIVACY_POLICY_ACCEPTED, settings.privacyPolicyAccepted)
             .putBoolean(KEY_ANALYTICS_ENABLED, settings.analyticsEnabled)
+            .putBoolean(KEY_ONBOARDING_GUIDE_SHOWN, settings.onboardingGuideShown)
         if (settings.targetWeightKg == null) {
             editor.remove(KEY_TARGET_WEIGHT_KG)
         } else {
@@ -220,6 +222,7 @@ class BiteStore(context: Context) {
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_PRIVACY_POLICY_ACCEPTED = "privacy_policy_accepted"
         const val KEY_ANALYTICS_ENABLED = "analytics_enabled"
+        const val KEY_ONBOARDING_GUIDE_SHOWN = "onboarding_guide_shown"
         const val KEY_RECORDS = "records"
         const val KEY_WEIGHTS = "weights"
         const val KEY_SNACK_REFUSALS = "snack_refusals"

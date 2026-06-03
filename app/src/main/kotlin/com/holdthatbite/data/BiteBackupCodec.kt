@@ -72,6 +72,7 @@ object BiteBackupCodec {
             .put("themeMode", settings.themeMode.name)
             .put("privacyPolicyAccepted", settings.privacyPolicyAccepted)
             .put("analyticsEnabled", settings.analyticsEnabled)
+            .put("onboardingGuideShown", settings.onboardingGuideShown)
     }
 
     private fun decodeSettings(json: JSONObject): AppSettings {
@@ -88,6 +89,7 @@ object BiteBackupCodec {
             themeMode = decodeEnum(json.optString("themeMode"), defaults.themeMode),
             privacyPolicyAccepted = json.optBoolean("privacyPolicyAccepted", defaults.privacyPolicyAccepted),
             analyticsEnabled = json.optBoolean("analyticsEnabled", defaults.analyticsEnabled),
+            onboardingGuideShown = json.optBoolean("onboardingGuideShown", defaults.onboardingGuideShown),
         )
     }
 

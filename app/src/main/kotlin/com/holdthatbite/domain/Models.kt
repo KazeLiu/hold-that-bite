@@ -45,6 +45,7 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val privacyPolicyAccepted: Boolean = false,
     val analyticsEnabled: Boolean = false,
+    val onboardingGuideShown: Boolean = false,
 )
 
 data class BiteRecord(
