@@ -1,6 +1,7 @@
 package com.holdthatbite
 
 import android.util.Log
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -9,6 +10,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -386,14 +392,9 @@ internal fun SnackRefusalAction(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    if (count > 0) "小胜利 $count 次" else "还没小胜利",
-                    color = if (count > 0) AppColors.StatusKept else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                SnackRefusalCountLabel(
+                    count = count,
+                    modifier = Modifier.weight(1f),
                 )
                 OutlinedButton(
                     onClick = {
@@ -431,6 +432,68 @@ internal fun SnackRefusalAction(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SnackRefusalCountLabel(
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    if (count <= 0) {
+        Text(
+            "还没小胜利",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier,
+        )
+        return
+    }
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "小胜利 ",
+            color = AppColors.StatusKept,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        AnimatedContent(
+            targetState = count,
+            transitionSpec = {
+                val increasing = targetState > initialState
+                val enterOffset: (Int) -> Int = { height -> if (increasing) height else -height }
+                val exitOffset: (Int) -> Int = { height -> if (increasing) -height else height }
+
+                (slideInVertically(animationSpec = tween(220), initialOffsetY = enterOffset) +
+                    fadeIn(animationSpec = tween(160))) togetherWith
+                    (slideOutVertically(animationSpec = tween(220), targetOffsetY = exitOffset) +
+                        fadeOut(animationSpec = tween(140)))
+            },
+            label = "snack-refusal-count-roll",
+        ) { animatedCount ->
+            Text(
+                animatedCount.toString(),
+                color = AppColors.StatusKept,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                modifier = Modifier.graphicsLayer { translationY = 2f },
+            )
+        }
+        Text(
+            " 次",
+            color = AppColors.StatusKept,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }
 

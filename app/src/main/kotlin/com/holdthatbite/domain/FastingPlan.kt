@@ -1,5 +1,7 @@
 package com.holdthatbite.domain
 
+import java.time.LocalDate
+
 enum class FastingPlan(
     val label: String,
     val fastingHours: Int,
@@ -57,6 +59,15 @@ data class MealTime(
 
     internal val totalMinutes: Int
         get() = hour * 60 + minute
+}
+
+data class DailyFirstMealOverride(
+    val date: LocalDate,
+    val firstMeal: MealTime,
+) {
+    fun firstMealFor(targetDate: LocalDate, defaultFirstMeal: MealTime): MealTime {
+        return if (targetDate == date) firstMeal else defaultFirstMeal
+    }
 }
 
 data class LastBiteTime(

@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 class FastingPlanTest {
     @Test
@@ -74,5 +75,23 @@ class FastingPlanTest {
         assertTrue(FastingPlan.TWENTY_FOUR.isEatingWindow(firstMeal, MealTime(hour = 23, minute = 30)))
         assertTrue(FastingPlan.TWENTY_FOUR.isEatingWindow(firstMeal, MealTime(hour = 2, minute = 59)))
         assertFalse(FastingPlan.TWENTY_FOUR.isEatingWindow(firstMeal, MealTime(hour = 3, minute = 0)))
+    }
+
+    @Test
+    fun dailyFirstMealOverrideOnlyAppliesToMatchingDate() {
+        val defaultFirstMeal = MealTime(hour = 9, minute = 0)
+        val override = DailyFirstMealOverride(
+            date = LocalDate.of(2026, 6, 4),
+            firstMeal = MealTime(hour = 7, minute = 0),
+        )
+
+        assertEquals(
+            MealTime(hour = 7, minute = 0),
+            override.firstMealFor(LocalDate.of(2026, 6, 4), defaultFirstMeal),
+        )
+        assertEquals(
+            defaultFirstMeal,
+            override.firstMealFor(LocalDate.of(2026, 6, 5), defaultFirstMeal),
+        )
     }
 }

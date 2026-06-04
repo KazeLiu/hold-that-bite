@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.app.TimePickerDialog
+import android.widget.TimePicker
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -21,7 +23,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -149,6 +153,7 @@ import com.holdthatbite.domain.BiteRecord
 import com.holdthatbite.domain.BiteStatus
 import com.holdthatbite.domain.CalendarDay
 import com.holdthatbite.domain.CalendarMode
+import com.holdthatbite.domain.DailyFirstMealOverride
 import com.holdthatbite.domain.FastingPlan
 import com.holdthatbite.domain.MealTime
 import com.holdthatbite.domain.ThemeMode
@@ -158,6 +163,7 @@ import com.holdthatbite.domain.WeightTrend
 import com.holdthatbite.ui.AppColorPalette
 import com.holdthatbite.ui.AppColors
 import com.holdthatbite.ui.CheckInSupplement
+import com.holdthatbite.ui.SnackRefusalFeedback
 import com.holdthatbite.ui.WeightChartModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -242,6 +248,7 @@ private fun HoldThatBiteApp(
     val store = remember { BiteStore(activity) }
     val analytics = remember { AnalyticsTracker(activity) }
     var settings by remember { mutableStateOf(store.loadSettings()) }
+    var dailyFirstMealOverride by remember { mutableStateOf(store.loadDailyFirstMealOverride()) }
     var records by remember { mutableStateOf(store.loadRecords()) }
     var snackRefusals by remember { mutableStateOf(store.loadSnackRefusals()) }
     var weights by remember { mutableStateOf(store.loadWeights()) }
@@ -254,6 +261,8 @@ private fun HoldThatBiteApp(
     var showPrivacyDialog by remember { mutableStateOf(!settings.privacyPolicyAccepted) }
     var showPolicyDetails by remember { mutableStateOf(false) }
     var showShortcutEncouragement by remember { mutableStateOf(false) }
+    var shortcutSnackFeedback by remember { mutableStateOf<SnackRefusalFeedback?>(null) }
+    var shortcutSnackFeedbackId by remember { mutableStateOf(0L) }
     var showOnboardingGuide by remember {
         mutableStateOf(settings.privacyPolicyAccepted && !settings.onboardingGuideShown)
     }
@@ -265,8 +274,14 @@ private fun HoldThatBiteApp(
         store.saveSettings(nextSettings)
     }
 
+    fun saveDailyFirstMealOverride(override: DailyFirstMealOverride?) {
+        dailyFirstMealOverride = override
+        store.saveDailyFirstMealOverride(override)
+    }
+
     fun reloadLocalData() {
         settings = store.loadSettings()
+        dailyFirstMealOverride = store.loadDailyFirstMealOverride()
         records = store.loadRecords()
         snackRefusals = store.loadSnackRefusals()
         weights = store.loadWeights()
@@ -356,7 +371,7 @@ private fun HoldThatBiteApp(
         )
     }
 
-    fun recordSnackRefusal() {
+    fun addSnackRefusal(): Int {
         val today = LocalDate.now()
         val key = BiteCalendar.dateKey(today)
         store.incrementSnackRefusal(key)
@@ -364,6 +379,11 @@ private fun HoldThatBiteApp(
         selectedDate = today
         visibleMonth = YearMonth.from(today)
         analytics.track(AnalyticsEvent.SNACK_REFUSAL_ADDED)
+        return snackRefusals[key] ?: 0
+    }
+
+    fun recordSnackRefusal() {
+        addSnackRefusal()
     }
 
     fun undoSnackRefusal() {
@@ -376,8 +396,10 @@ private fun HoldThatBiteApp(
     }
 
     fun canRecordKeptNow(): Boolean {
+        val today = LocalDate.now()
         val now = LocalTime.now()
-        val firstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
+        val defaultFirstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
+        val firstMeal = dailyFirstMealOverride?.firstMealFor(today, defaultFirstMeal) ?: defaultFirstMeal
         val nowMealTime = MealTime(now.hour, now.minute)
         return !settings.fastingPlan.isEatingWindow(firstMeal, nowMealTime)
     }
@@ -386,7 +408,12 @@ private fun HoldThatBiteApp(
         when (action) {
             LauncherShortcutAction.SNACK_REFUSAL -> {
                 currentTab = AppTab.HOME
-                recordSnackRefusal()
+                val count = addSnackRefusal()
+                shortcutSnackFeedbackId += 1
+                shortcutSnackFeedback = SnackRefusalFeedback(
+                    count = count,
+                    id = shortcutSnackFeedbackId,
+                )
             }
             LauncherShortcutAction.KEPT_CHECK_IN -> {
                 val today = LocalDate.now()
@@ -422,6 +449,13 @@ private fun HoldThatBiteApp(
         if (showShortcutEncouragement) {
             delay(3200)
             showShortcutEncouragement = false
+        }
+    }
+
+    LaunchedEffect(shortcutSnackFeedback?.id) {
+        if (shortcutSnackFeedback != null) {
+            delay(3400)
+            shortcutSnackFeedback = null
         }
     }
 
@@ -512,6 +546,7 @@ private fun HoldThatBiteApp(
                         )
                                 AppTab.HOME -> HomePage(
                                     settings = settings,
+                                    dailyFirstMealOverride = dailyFirstMealOverride,
                                     records = records,
                                     snackRefusals = snackRefusals,
                                     weights = weights,
@@ -555,6 +590,14 @@ private fun HoldThatBiteApp(
                                     },
                                     onSnackRefusal = ::recordSnackRefusal,
                                     onUndoSnackRefusal = ::undoSnackRefusal,
+                                    onTodayFirstMealChanged = { firstMeal ->
+                                        saveDailyFirstMealOverride(
+                                            DailyFirstMealOverride(
+                                                date = LocalDate.now(),
+                                                firstMeal = firstMeal,
+                                            )
+                                        )
+                                    },
                                 )
                                 AppTab.SETTINGS -> SettingsPage(
                                     settings = settings,
@@ -727,6 +770,44 @@ private fun HoldThatBiteApp(
                 )
             }
 
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding(),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                AnimatedVisibility(
+                    visible = shortcutSnackFeedback != null,
+                    enter = slideInVertically(
+                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                        initialOffsetY = { height -> height / 2 },
+                    ) + fadeIn(
+                        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+                        initialAlpha = 0f,
+                    ),
+                    exit = slideOutVertically(
+                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                        targetOffsetY = { height -> height / 3 },
+                    ) + fadeOut(
+                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                        targetAlpha = 0f,
+                    ),
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 86.dp),
+                ) {
+                    shortcutSnackFeedback?.let { feedback ->
+                        SnackShortcutFeedbackBanner(
+                            feedback = feedback,
+                            onUndo = {
+                                undoSnackRefusal()
+                                shortcutSnackFeedback = null
+                            },
+                        )
+                    }
+                }
+            }
+
             if (showShortcutEncouragement) {
                 AlertDialog(
                     onDismissRequest = { showShortcutEncouragement = false },
@@ -780,8 +861,41 @@ private fun HoldThatBiteApp(
 }
 
 @Composable
+private fun SnackShortcutFeedbackBanner(
+    feedback: SnackRefusalFeedback,
+    onUndo: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Primary,
+        shadowElevation = 10.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = feedback.message,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onUndo) {
+                Text(feedback.undoLabel, color = Color.White, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+    }
+}
+
+@Composable
 private fun HomePage(
     settings: AppSettings,
+    dailyFirstMealOverride: DailyFirstMealOverride?,
     records: Map<String, BiteRecord>,
     snackRefusals: Map<String, Int>,
     weights: List<WeightEntry>,
@@ -794,10 +908,13 @@ private fun HomePage(
     onEditNote: (BiteRecord) -> Unit,
     onSnackRefusal: () -> Unit,
     onUndoSnackRefusal: () -> Unit,
+    onTodayFirstMealChanged: (MealTime) -> Unit,
 ) {
     val today = LocalDate.now()
     val now = LocalTime.now()
-    val firstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
+    val defaultFirstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
+    val firstMeal = dailyFirstMealOverride?.firstMealFor(today, defaultFirstMeal) ?: defaultFirstMeal
+    val isFirstMealOverriddenToday = dailyFirstMealOverride?.date == today
     val nowMealTime = MealTime(now.hour, now.minute)
     val inEatingWindow = settings.fastingPlan.isEatingWindow(firstMeal, nowMealTime)
     val lastBiteTime = settings.fastingPlan.lastBiteTime(firstMeal)
@@ -886,8 +1003,11 @@ private fun HomePage(
                     onKept = { onCheckIn(selectedDate, BiteStatus.KEPT) },
                 )
                 showEatingWindowHint -> EatingWindowHint(
+                    firstMeal = firstMeal,
+                    isFirstMealOverriddenToday = isFirstMealOverriddenToday,
                     lastBiteText = lastBiteTime.displayText,
                     planLabel = settings.fastingPlan.label,
+                    onTodayFirstMealChanged = onTodayFirstMealChanged,
                 )
             }
         }
@@ -895,7 +1015,20 @@ private fun HomePage(
 }
 
 @Composable
-private fun EatingWindowHint(lastBiteText: String, planLabel: String) {
+private fun EatingWindowHint(
+    firstMeal: MealTime,
+    isFirstMealOverriddenToday: Boolean,
+    lastBiteText: String,
+    planLabel: String,
+    onTodayFirstMealChanged: (MealTime) -> Unit,
+) {
+    var showFirstMealPicker by remember { mutableStateOf(false) }
+    val detailText = if (isFirstMealOverriddenToday) {
+        "今天按 ${firstMeal.displayText} 开始，$lastBiteText 后回来记录今天有没有守住"
+    } else {
+        "$lastBiteText 后回来记录今天有没有守住"
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -911,13 +1044,84 @@ private fun EatingWindowHint(lastBiteText: String, planLabel: String) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("现在是正常吃饭时间", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("现在是正常吃饭时间", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "修改",
+                        color = Primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { showFirstMealPicker = true }
+                            .semantics { contentDescription = "修改今天的第一餐时间" }
+                            .background(Primary.copy(alpha = 0.1f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
                 Spacer(Modifier.height(3.dp))
-                Text("$lastBiteText 后回来记录今天有没有守住", color = TextSecondary, fontSize = 13.sp)
+                Text(detailText, color = TextSecondary, fontSize = 13.sp)
             }
             Text(planLabel, color = Primary, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
+
+    if (showFirstMealPicker) {
+        TodayFirstMealTimeDialog(
+            onDismiss = { showFirstMealPicker = false },
+            onConfirm = { mealTime ->
+                showFirstMealPicker = false
+                onTodayFirstMealChanged(mealTime)
+            },
+        )
+    }
+}
+
+@Composable
+private fun TodayFirstMealTimeDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (MealTime) -> Unit,
+) {
+    val initialTime = remember { LocalTime.now() }
+    var selectedHour by remember { mutableStateOf(initialTime.hour) }
+    var selectedMinute by remember { mutableStateOf(initialTime.minute) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("修改今天的第一餐时间", color = TextPrimary, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            AndroidView(
+                factory = { context ->
+                    TimePicker(context).apply {
+                        setIs24HourView(true)
+                        hour = selectedHour
+                        minute = selectedMinute
+                        setOnTimeChangedListener { _, hourOfDay, minuteOfHour ->
+                            selectedHour = hourOfDay
+                            selectedMinute = minuteOfHour
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(MealTime(selectedHour, selectedMinute)) }) {
+                Text("确定", color = Primary, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消", color = TextSecondary)
+            }
+        },
+    )
 }
 
 @Composable
@@ -1213,12 +1417,6 @@ private fun DaySummary(
                     color = Success,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    "这些都算数，风宝已经帮你记下啦。",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
                 )
             }
             Text(
@@ -2289,26 +2487,26 @@ private fun PhilosophyCard() {
             Column(modifier = Modifier.weight(1f)) {
                 Text("理念", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
-                Text("轻轻记下今天", color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("记下今天，坚持不懈", color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            "守住这口不要求你每天都完美。先选好自己的进食窗口，到了禁食窗口后，再把今天标成守住了或没守住。",
+            "守住这口不要求你每天都完美。选好自己的进食窗口，到了禁食窗口后，再把今天标成守住了或没守住。",
             color = TextSecondary,
             fontSize = 14.sp,
             lineHeight = 21.sp,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "拒绝零食可以多多点：路过便利店没进去，打开外卖又关掉，拿起饼干又放回去，心里很想吃但最后忍住了，都值得点一下。每一下都不是小题大做，都是你把今天往前推了一点点。",
+            "拒绝零食可以多多点：路过便利店没进去，打开外卖又关掉，拿起饼干又放回去，心里很想吃但最后忍住了，都值得点一下。每一下都不是小题大做，都是你控制了热量的摄入。",
             color = TextSecondary,
             fontSize = 14.sp,
             lineHeight = 21.sp,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "它只是一个轻量日历，陪你把真实过程留下来。没守住也不是失败，记下来，明天风宝再陪你重新开始。",
+            "它只是一个轻量日历，陪你把真实过程记录下来。没守住也不是失败，记下来，明天重新开始。",
             color = TextSecondary,
             fontSize = 14.sp,
             lineHeight = 21.sp,
@@ -2332,14 +2530,14 @@ private fun OnboardingGuideDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    "欢迎来守住这口。它不会要求你变得很英勇，只帮你记三件小事：今天的进食窗口、有没有守住、以及那些忍住零食的小小胜利。",
+                    "欢迎使用守住这口。它不会要求你变得无敌，它只帮你记几件小事：今天的进食窗口、禁食期有没有守住、以及那些忍住零食的小小胜利。",
                     color = TextSecondary,
                     fontSize = 14.sp,
                     lineHeight = 21.sp,
                 )
                 OnboardingGuidePoint("第一步", "去设置里选择 16+8、14+10 或适合你的禁食计划。")
                 OnboardingGuidePoint("每天", "想吃零食时，忍住一次就点一次拒绝零食；少买一包、少拆一袋、少吃一口，都可以多多记录。")
-                OnboardingGuidePoint("收尾", "进入禁食窗口后，轻轻点一下守住了；没守住也可以诚实记下。")
+                OnboardingGuidePoint("收尾", "进入禁食窗口后，点一下守住了；没守住也可以诚实记下。")
             }
         },
         confirmButton = {

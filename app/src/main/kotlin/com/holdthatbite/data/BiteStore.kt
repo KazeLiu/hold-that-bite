@@ -5,13 +5,16 @@ import com.holdthatbite.domain.AppSettings
 import com.holdthatbite.domain.BiteRecord
 import com.holdthatbite.domain.BiteStatus
 import com.holdthatbite.domain.CalendarMode
+import com.holdthatbite.domain.DailyFirstMealOverride
 import com.holdthatbite.domain.FastingPlan
+import com.holdthatbite.domain.MealTime
 import com.holdthatbite.domain.SnackRefusalCounter
 import com.holdthatbite.domain.ThemeMode
 import com.holdthatbite.domain.WeightEntry
 import com.holdthatbite.domain.WeightUnit
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
 
 class BiteStore(context: Context) {
     private val preferences = context.getSharedPreferences("hold_that_bite", Context.MODE_PRIVATE)
@@ -86,6 +89,40 @@ class BiteStore(context: Context) {
             editor.remove(KEY_TARGET_WEIGHT_KG)
         } else {
             editor.putString(KEY_TARGET_WEIGHT_KG, settings.targetWeightKg.toString())
+        }
+        editor.apply()
+    }
+
+    fun loadDailyFirstMealOverride(): DailyFirstMealOverride? {
+        val date = preferences.getString(KEY_DAILY_FIRST_MEAL_OVERRIDE_DATE, null)
+            ?.let { value -> runCatching { LocalDate.parse(value) }.getOrNull() }
+            ?: return null
+        if (
+            !preferences.contains(KEY_DAILY_FIRST_MEAL_OVERRIDE_HOUR) ||
+            !preferences.contains(KEY_DAILY_FIRST_MEAL_OVERRIDE_MINUTE)
+        ) {
+            return null
+        }
+        val hour = preferences.getInt(KEY_DAILY_FIRST_MEAL_OVERRIDE_HOUR, -1).coerceIn(0, 23)
+        val minute = preferences.getInt(KEY_DAILY_FIRST_MEAL_OVERRIDE_MINUTE, -1).coerceIn(0, 59)
+        return DailyFirstMealOverride(
+            date = date,
+            firstMeal = MealTime(hour = hour, minute = minute),
+        )
+    }
+
+    fun saveDailyFirstMealOverride(override: DailyFirstMealOverride?) {
+        val editor = preferences.edit()
+        if (override == null) {
+            editor
+                .remove(KEY_DAILY_FIRST_MEAL_OVERRIDE_DATE)
+                .remove(KEY_DAILY_FIRST_MEAL_OVERRIDE_HOUR)
+                .remove(KEY_DAILY_FIRST_MEAL_OVERRIDE_MINUTE)
+        } else {
+            editor
+                .putString(KEY_DAILY_FIRST_MEAL_OVERRIDE_DATE, override.date.toString())
+                .putInt(KEY_DAILY_FIRST_MEAL_OVERRIDE_HOUR, override.firstMeal.hour)
+                .putInt(KEY_DAILY_FIRST_MEAL_OVERRIDE_MINUTE, override.firstMeal.minute)
         }
         editor.apply()
     }
@@ -223,6 +260,9 @@ class BiteStore(context: Context) {
         const val KEY_PRIVACY_POLICY_ACCEPTED = "privacy_policy_accepted"
         const val KEY_ANALYTICS_ENABLED = "analytics_enabled"
         const val KEY_ONBOARDING_GUIDE_SHOWN = "onboarding_guide_shown"
+        const val KEY_DAILY_FIRST_MEAL_OVERRIDE_DATE = "daily_first_meal_override_date"
+        const val KEY_DAILY_FIRST_MEAL_OVERRIDE_HOUR = "daily_first_meal_override_hour"
+        const val KEY_DAILY_FIRST_MEAL_OVERRIDE_MINUTE = "daily_first_meal_override_minute"
         const val KEY_RECORDS = "records"
         const val KEY_WEIGHTS = "weights"
         const val KEY_SNACK_REFUSALS = "snack_refusals"
