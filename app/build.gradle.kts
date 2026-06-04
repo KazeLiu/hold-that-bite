@@ -1,6 +1,33 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val releaseKeysDir = providers.gradleProperty("holdThatBiteReleaseKeysDir")
+    .orElse("../../android-keys")
+    .get()
+val releaseSigningPropertiesFile = rootProject.file("$releaseKeysDir/hold-that-bite-release-passwords.txt")
+val releaseSigningProperties = if (releaseSigningPropertiesFile.isFile) {
+    releaseSigningPropertiesFile.readLines()
+        .mapNotNull { line ->
+            val trimmed = line.trim()
+            val separatorIndex = trimmed.indexOf("=")
+            if (trimmed.isEmpty() || trimmed.startsWith("#") || separatorIndex <= 0) {
+                null
+            } else {
+                trimmed.substring(0, separatorIndex).trim() to trimmed.substring(separatorIndex + 1).trim()
+            }
+        }
+        .toMap()
+} else {
+    emptyMap()
+}
+
+fun releaseSigningProperty(name: String): String {
+    return releaseSigningProperties[name]?.takeIf { it.isNotBlank() }
+        ?: error("Missing release signing property: $name")
 }
 
 android {
@@ -11,8 +38,32 @@ android {
         applicationId = "com.holdthatbite"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.5.5"
+        versionCode = 12
+        versionName = "0.6"
+    }
+
+    signingConfigs {
+        if (releaseSigningPropertiesFile.isFile) {
+            create("release") {
+                val configuredStoreFile = File(releaseSigningProperty("storeFile"))
+                storeFile = if (configuredStoreFile.isAbsolute) {
+                    configuredStoreFile
+                } else {
+                    releaseSigningPropertiesFile.parentFile.resolve(configuredStoreFile)
+                }
+                storePassword = releaseSigningProperty("storePassword")
+                keyAlias = releaseSigningProperty("keyAlias")
+                keyPassword = releaseSigningProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (releaseSigningPropertiesFile.isFile) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     compileOptions {
