@@ -15,6 +15,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -27,6 +28,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -124,6 +126,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -2571,53 +2574,95 @@ private fun SettingsPage(
 
 @Composable
 private fun PhilosophyCard() {
-    AppCard(modifier = Modifier.fillMaxWidth()) {
+    var expanded by remember { mutableStateOf(false) }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 0f else 180f,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "philosophyArrowRotation",
+    )
+
+    AppCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+            )
+            .semantics {
+                contentDescription = if (expanded) "收起理念" else "展开理念"
+            },
+        onClick = { expanded = !expanded },
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Primary.copy(alpha = 0.14f)),
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Restaurant,
+                Image(
+                    painter = painterResource(id = R.drawable.logo),
                     contentDescription = null,
-                    tint = Primary,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp)),
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("理念", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
-                Text("记下今天，坚持不懈", color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("白天好好吃，晚上努力忍", color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier
+                    .size(22.dp)
+                    .graphicsLayer { rotationZ = arrowRotation },
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(animationSpec = tween(durationMillis = 180)) +
+                slideInVertically(
+                    animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                    initialOffsetY = { height -> -height / 5 },
+                ),
+            exit = fadeOut(animationSpec = tween(durationMillis = 140)) +
+                slideOutVertically(
+                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                    targetOffsetY = { height -> -height / 5 },
+                ),
+        ) {
+            Column {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "守住这口不要求你每天都完美。先选好适合自己的进食窗口，尽量把吃东西放在白天和傍晚前，晚上就让身体慢慢安静下来。",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "到了最后一口之后，再记下今天有没有守住。没守住也不是失败，只是把真实情况留下来，明天继续调整。",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "鼓励多点拒绝零食：打开外卖又关掉，拿起饼干又放回去，路过便利店转身就走，去超市拒绝试吃，都可以 +1！甚至拒绝一次按十下都可以！",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                )
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "守住这口不要求你每天都完美。选好自己的进食窗口，到了禁食窗口后，再把今天标成守住了或没守住。",
-            color = TextSecondary,
-            fontSize = 14.sp,
-            lineHeight = 21.sp,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "拒绝零食可以多多点：路过便利店没进去，打开外卖又关掉，拿起饼干又放回去，心里很想吃但最后忍住了，都值得点一下。每一下都不是小题大做，都是你控制了热量的摄入。",
-            color = TextSecondary,
-            fontSize = 14.sp,
-            lineHeight = 21.sp,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "它只是一个轻量日历，陪你把真实过程记录下来。没守住也不是失败，记下来，明天重新开始。",
-            color = TextSecondary,
-            fontSize = 14.sp,
-            lineHeight = 21.sp,
-        )
     }
 }
 
