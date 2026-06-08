@@ -30,6 +30,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -231,6 +232,13 @@ private val Missed: Color @Composable get() = LocalAppPalette.current.missed
 private val MissedSoft: Color @Composable get() = LocalAppPalette.current.missedSoft
 private val Neutral: Color @Composable get() = LocalAppPalette.current.neutral
 private const val TabTransitionMillis = 240
+private val BottomNavHorizontalPadding = 34.dp
+private val BottomNavVerticalPadding = 0.dp
+private val BottomNavHeight = 80.dp
+private val BottomNavIndicatorWidth = 64.dp
+private val BottomNavIndicatorHeight = 40.dp
+private val BottomNavItemWidth = 64.dp
+private val BottomNavItemHeight = 80.dp
 private val HomeFixedActionsFallbackPadding = 118.dp
 private val HomeFixedActionsGap = 10.dp
 private val HomeMonthCalendarHeight = 336.dp
@@ -3094,31 +3102,30 @@ private fun AppBottomNav(
         durationMillis = TabTransitionMillis,
         easing = FastOutSlowInEasing
     )
-
     Box(
         modifier = modifier
             .fillMaxWidth()
             .background(SurfaceColor)
-            .padding(horizontal = 34.dp, vertical = 4.dp)
+            .padding(horizontal = BottomNavHorizontalPadding, vertical = BottomNavVerticalPadding)
     ) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(BottomNavHeight)
         ) {
-            val indicatorWidth = 54.dp
-            val indicatorHeight = 44.dp
             val slotWidth = maxWidth / tabCount.toFloat()
+            val indicatorYOffset = (BottomNavHeight - BottomNavIndicatorHeight) / 2f
             val indicatorOffset by animateDpAsState(
-                targetValue = (slotWidth * selectedIndex.toFloat()) + ((slotWidth - indicatorWidth) / 2f),
+                targetValue = (slotWidth * selectedIndex.toFloat()) +
+                    ((slotWidth - BottomNavIndicatorWidth) / 2f),
                 animationSpec = motionSpec,
                 label = "bottom-nav-indicator-offset",
             )
 
             Box(
                 modifier = Modifier
-                    .offset(x = indicatorOffset, y = 2.dp)
-                    .size(width = indicatorWidth, height = indicatorHeight)
+                    .offset(x = indicatorOffset, y = indicatorYOffset)
+                    .size(width = BottomNavIndicatorWidth, height = BottomNavIndicatorHeight)
                     .clip(RoundedCornerShape(18.dp))
                     .background(Primary.copy(alpha = 0.12f))
             )
@@ -3126,7 +3133,7 @@ private fun AppBottomNav(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(BottomNavHeight),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 visibleTabs.forEach { tab ->
@@ -3161,9 +3168,13 @@ private fun NavIconButton(tab: AppTab, selected: Boolean, onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
-            .size(width = 54.dp, height = 44.dp)
+            .size(width = BottomNavItemWidth, height = BottomNavItemHeight)
             .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
             .semantics { contentDescription = tab.label },
         contentAlignment = Alignment.Center
     ) {
