@@ -2650,7 +2650,22 @@ private fun SettingsPage(
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ProjectGitHubUrl)))
             },
         ) {
-            Text("项目地址", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "项目地址",
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
             Spacer(Modifier.height(4.dp))
             Text("github.com/KazeLiu/hold-that-bite", color = Primary, fontSize = 13.sp)
         }
