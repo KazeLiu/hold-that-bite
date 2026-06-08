@@ -154,6 +154,7 @@ import com.holdthatbite.domain.BiteStatus
 import com.holdthatbite.domain.CalendarDay
 import com.holdthatbite.domain.CalendarMode
 import com.holdthatbite.domain.DailyFirstMealOverride
+import com.holdthatbite.domain.FastingDayPhase
 import com.holdthatbite.domain.FastingPlan
 import com.holdthatbite.domain.MealTime
 import com.holdthatbite.domain.ThemeMode
@@ -261,6 +262,7 @@ private fun HoldThatBiteApp(
     var showPrivacyDialog by remember { mutableStateOf(!settings.privacyPolicyAccepted) }
     var showPolicyDetails by remember { mutableStateOf(false) }
     var showShortcutEncouragement by remember { mutableStateOf(false) }
+    var lateEatingWarningMessage by remember { mutableStateOf<String?>(null) }
     var shortcutSnackFeedback by remember { mutableStateOf<SnackRefusalFeedback?>(null) }
     var shortcutSnackFeedbackId by remember { mutableStateOf(0L) }
     var showOnboardingGuide by remember {
@@ -401,7 +403,7 @@ private fun HoldThatBiteApp(
         val defaultFirstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
         val firstMeal = dailyFirstMealOverride?.firstMealFor(today, defaultFirstMeal) ?: defaultFirstMeal
         val nowMealTime = MealTime(now.hour, now.minute)
-        return !settings.fastingPlan.isEatingWindow(firstMeal, nowMealTime)
+        return settings.fastingPlan.dayPhase(firstMeal, nowMealTime) == FastingDayPhase.AFTER_LAST_BITE
     }
 
     fun handleLauncherShortcut(action: LauncherShortcutAction) {
@@ -591,12 +593,17 @@ private fun HoldThatBiteApp(
                                     onSnackRefusal = ::recordSnackRefusal,
                                     onUndoSnackRefusal = ::undoSnackRefusal,
                                     onTodayFirstMealChanged = { firstMeal ->
-                                        saveDailyFirstMealOverride(
-                                            DailyFirstMealOverride(
-                                                date = LocalDate.now(),
-                                                firstMeal = firstMeal,
+                                        if (settings.fastingPlan.isSameDayPlan(firstMeal)) {
+                                            saveDailyFirstMealOverride(
+                                                DailyFirstMealOverride(
+                                                    date = LocalDate.now(),
+                                                    firstMeal = firstMeal,
+                                                )
                                             )
-                                        )
+                                        } else {
+                                            val latestFirstMeal = settings.fastingPlan.latestSameDayFirstMeal()
+                                            lateEatingWarningMessage = buildLateEatingWarningMessage(latestFirstMeal)
+                                        }
                                     },
                                 )
                                 AppTab.SETTINGS -> SettingsPage(
@@ -621,6 +628,9 @@ private fun HoldThatBiteApp(
                                     },
                                     onImportData = {
                                         importLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+                                    },
+                                    onLateEatingWarning = { message ->
+                                        lateEatingWarningMessage = message
                                     },
                                 )
                             }
@@ -821,6 +831,19 @@ private fun HoldThatBiteApp(
                 )
             }
 
+            lateEatingWarningMessage?.let { message ->
+                AlertDialog(
+                    onDismissRequest = { lateEatingWarningMessage = null },
+                    title = { Text("进食时间段不建议设置在午夜") },
+                    text = { Text(message) },
+                    confirmButton = {
+                        TextButton(onClick = { lateEatingWarningMessage = null }) {
+                            Text("知道了", color = Primary, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                )
+            }
+
             if (showPrivacyDialog) {
                 PrivacyConsentDialog(
                     onEnableAnalytics = {
@@ -916,11 +939,13 @@ private fun HomePage(
     val firstMeal = dailyFirstMealOverride?.firstMealFor(today, defaultFirstMeal) ?: defaultFirstMeal
     val isFirstMealOverriddenToday = dailyFirstMealOverride?.date == today
     val nowMealTime = MealTime(now.hour, now.minute)
-    val inEatingWindow = settings.fastingPlan.isEatingWindow(firstMeal, nowMealTime)
+    val dayPhase = settings.fastingPlan.dayPhase(firstMeal, nowMealTime)
     val lastBiteTime = settings.fastingPlan.lastBiteTime(firstMeal)
     val selectedRecord = records[BiteCalendar.dateKey(selectedDate)]
-    val showFinalCheckInActions = selectedDate.isBefore(today) || (selectedDate == today && !inEatingWindow)
-    val showEatingWindowHint = selectedDate == today && inEatingWindow
+    val showBeforeFirstMealPanel = selectedDate == today && dayPhase == FastingDayPhase.BEFORE_FIRST_MEAL
+    val showFinalCheckInActions = selectedDate.isBefore(today) ||
+        (selectedDate == today && dayPhase == FastingDayPhase.AFTER_LAST_BITE)
+    val showEatingWindowHint = selectedDate == today && dayPhase == FastingDayPhase.EATING_WINDOW
     val selectedSnackRefusalCount = snackRefusals[BiteCalendar.dateKey(selectedDate)] ?: 0
     val todaySnackRefusalCount = snackRefusals[BiteCalendar.dateKey(today)] ?: 0
     val density = LocalDensity.current
@@ -997,6 +1022,15 @@ private fun HomePage(
                 onUndo = onUndoSnackRefusal,
             )
 
+            if (showBeforeFirstMealPanel) {
+                BeforeFirstMealPanel(
+                    firstMeal = firstMeal,
+                    isFirstMealOverriddenToday = isFirstMealOverriddenToday,
+                    currentTime = nowMealTime,
+                    onTodayFirstMealChanged = onTodayFirstMealChanged,
+                )
+            }
+
             when {
                 showFinalCheckInActions -> CelebrationCheckInActions(
                     onMissed = { onCheckIn(selectedDate, BiteStatus.MISSED) },
@@ -1011,6 +1045,69 @@ private fun HomePage(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun BeforeFirstMealPanel(
+    firstMeal: MealTime,
+    isFirstMealOverriddenToday: Boolean,
+    currentTime: MealTime,
+    onTodayFirstMealChanged: (MealTime) -> Unit,
+) {
+    var showFirstMealPicker by remember { mutableStateOf(false) }
+    val detailText = if (isFirstMealOverriddenToday) {
+        "今天按 ${firstMeal.displayText} 开始，没到第一餐前先不用做最终打卡"
+    } else {
+        "计划 ${firstMeal.displayText} 开始，没到第一餐前先不用做最终打卡"
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = "调整今天的第一餐时间" },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Neutral)
+                .clickable { showFirstMealPicker = true }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "还没开始今天第一餐",
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(detailText, color = TextSecondary, fontSize = 13.sp)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = { onTodayFirstMealChanged(currentTime) }) {
+                    Text("现在开始", color = Primary, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                }
+                TextButton(onClick = { showFirstMealPicker = true }) {
+                    Text("调整", color = TextSecondary, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
+        }
+    }
+
+    if (showFirstMealPicker) {
+        TodayFirstMealTimeDialog(
+            onDismiss = { showFirstMealPicker = false },
+            onConfirm = { mealTime ->
+                showFirstMealPicker = false
+                onTodayFirstMealChanged(mealTime)
+            },
+        )
     }
 }
 
@@ -2315,6 +2412,7 @@ private fun SettingsPage(
     onPolicyRequested: () -> Unit,
     onExportData: () -> Unit,
     onImportData: () -> Unit,
+    onLateEatingWarning: (String) -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -2330,6 +2428,7 @@ private fun SettingsPage(
         FastingPlanSettingsCard(
             settings = settings,
             onSettingsChanged = onSettingsChanged,
+            onLateEatingWarning = onLateEatingWarning,
         )
         AppCard(modifier = Modifier.fillMaxWidth()) {
             Text("显示模式", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -2698,16 +2797,22 @@ private fun PrivacySection(title: String, body: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FastingPlanSettingsCard(settings: AppSettings, onSettingsChanged: (AppSettings) -> Unit) {
+private fun FastingPlanSettingsCard(
+    settings: AppSettings,
+    onSettingsChanged: (AppSettings) -> Unit,
+    onLateEatingWarning: (String) -> Unit,
+) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     val firstMeal = MealTime(hour = settings.firstMealHour, minute = settings.firstMealMinute)
     val lastBite = settings.fastingPlan.lastBiteTime(firstMeal)
+    val latestFirstMeal = settings.fastingPlan.latestSameDayFirstMeal()
+    val isSameDayPlan = settings.fastingPlan.isSameDayPlan(firstMeal)
 
     AppCard(modifier = Modifier.fillMaxWidth()) {
         Text("减肥安排", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
-        Text("选好进食窗口，再定第一餐时间。", color = TextSecondary, fontSize = 13.sp)
+        Text("选好进食窗口，再定第一餐时间；不建议把进食窗口延到深夜。", color = TextSecondary, fontSize = 13.sp)
         Spacer(Modifier.height(12.dp))
 
         ExposedDropdownMenuBox(
@@ -2773,7 +2878,19 @@ private fun FastingPlanSettingsCard(settings: AppSettings, onSettingsChanged: (A
                         },
                         onClick = {
                             expanded = false
-                            onSettingsChanged(settings.copy(fastingPlan = plan))
+                            val currentFirstMeal = MealTime(settings.firstMealHour, settings.firstMealMinute)
+                            val safeFirstMeal = if (plan.isSameDayPlan(currentFirstMeal)) {
+                                currentFirstMeal
+                            } else {
+                                plan.latestSameDayFirstMeal()
+                            }
+                            onSettingsChanged(
+                                settings.copy(
+                                    fastingPlan = plan,
+                                    firstMealHour = safeFirstMeal.hour,
+                                    firstMealMinute = safeFirstMeal.minute,
+                                )
+                            )
                         },
                     )
                 }
@@ -2791,19 +2908,24 @@ private fun FastingPlanSettingsCard(settings: AppSettings, onSettingsChanged: (A
             Column(modifier = Modifier.weight(1f)) {
                 Text("第一餐时间", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(3.dp))
-                Text("默认上午 09:00，可按你的作息调整。", color = TextSecondary, fontSize = 13.sp)
+                Text("最晚 ${latestFirstMeal.displayText}，避免把进食窗口拖到 0 点后。", color = TextSecondary, fontSize = 13.sp)
             }
             OutlinedButton(
                 onClick = {
                     TimePickerDialog(
                         context,
                         { _, hour, minute ->
-                            onSettingsChanged(
-                                settings.copy(
-                                    firstMealHour = hour,
-                                    firstMealMinute = minute,
+                            val selectedFirstMeal = MealTime(hour, minute)
+                            if (settings.fastingPlan.isSameDayPlan(selectedFirstMeal)) {
+                                onSettingsChanged(
+                                    settings.copy(
+                                        firstMealHour = hour,
+                                        firstMealMinute = minute,
+                                    )
                                 )
-                            )
+                            } else {
+                                onLateEatingWarning(buildLateEatingWarningMessage(latestFirstMeal))
+                            }
                         },
                         settings.firstMealHour,
                         settings.firstMealMinute,
@@ -2832,7 +2954,15 @@ private fun FastingPlanSettingsCard(settings: AppSettings, onSettingsChanged: (A
             Column(modifier = Modifier.weight(1f)) {
                 Text("最后一口时间", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(3.dp))
-                Text("按 ${settings.fastingPlan.label} 自动计算。", color = TextSecondary, fontSize = 13.sp)
+                Text(
+                    if (isSameDayPlan) {
+                        "按 ${settings.fastingPlan.label} 自动计算。"
+                    } else {
+                        "当前安排会跨到深夜，建议提前第一餐。"
+                    },
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                )
             }
             Text(lastBite.displayText, color = Primary, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
         }
@@ -2926,6 +3056,10 @@ private fun WeightUnitToggle(
             }
         }
     }
+}
+
+private fun buildLateEatingWarningMessage(latestFirstMeal: MealTime): String {
+    return "AHA 的科学声明提到，晚间或睡前进食和较差的心代谢健康风险有关。所以不建议把进食时间放到午夜后。第一餐最晚为 ${latestFirstMeal.displayText}。如果你的生物钟必须在深夜进食，那么这个减肥方案不适合你。"
 }
 
 @Composable

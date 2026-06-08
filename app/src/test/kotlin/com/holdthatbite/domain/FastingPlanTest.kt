@@ -78,6 +78,35 @@ class FastingPlanTest {
     }
 
     @Test
+    fun dayPhaseSplitsNaturalDayAroundFirstMealAndLastBite() {
+        val firstMeal = MealTime(hour = 9, minute = 0)
+
+        assertEquals(
+            FastingDayPhase.BEFORE_FIRST_MEAL,
+            FastingPlan.SIXTEEN_EIGHT.dayPhase(firstMeal, MealTime(hour = 8, minute = 59)),
+        )
+        assertEquals(
+            FastingDayPhase.EATING_WINDOW,
+            FastingPlan.SIXTEEN_EIGHT.dayPhase(firstMeal, MealTime(hour = 9, minute = 0)),
+        )
+        assertEquals(
+            FastingDayPhase.EATING_WINDOW,
+            FastingPlan.SIXTEEN_EIGHT.dayPhase(firstMeal, MealTime(hour = 16, minute = 59)),
+        )
+        assertEquals(
+            FastingDayPhase.AFTER_LAST_BITE,
+            FastingPlan.SIXTEEN_EIGHT.dayPhase(firstMeal, MealTime(hour = 17, minute = 0)),
+        )
+    }
+
+    @Test
+    fun latestFirstMealKeepsEatingWindowInsideNaturalDay() {
+        assertEquals(MealTime(hour = 16, minute = 0), FastingPlan.SIXTEEN_EIGHT.latestSameDayFirstMeal())
+        assertTrue(FastingPlan.SIXTEEN_EIGHT.isSameDayPlan(MealTime(hour = 16, minute = 0)))
+        assertFalse(FastingPlan.SIXTEEN_EIGHT.isSameDayPlan(MealTime(hour = 16, minute = 1)))
+    }
+
+    @Test
     fun dailyFirstMealOverrideOnlyAppliesToMatchingDate() {
         val defaultFirstMeal = MealTime(hour = 9, minute = 0)
         val override = DailyFirstMealOverride(

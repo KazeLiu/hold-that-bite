@@ -27,6 +27,30 @@ enum class FastingPlan(
         )
     }
 
+    fun latestSameDayFirstMeal(): MealTime {
+        val latestMinutes = MINUTES_PER_DAY - eatingHours * MINUTES_PER_HOUR
+        return MealTime(
+            hour = latestMinutes / MINUTES_PER_HOUR,
+            minute = latestMinutes % MINUTES_PER_HOUR,
+        )
+    }
+
+    fun isSameDayPlan(firstMeal: MealTime): Boolean {
+        return !lastBiteTime(firstMeal).isNextDay
+    }
+
+    fun dayPhase(firstMeal: MealTime, currentTime: MealTime): FastingDayPhase {
+        val startMinutes = firstMeal.totalMinutes
+        val currentMinutes = currentTime.totalMinutes
+        val endMinutes = startMinutes + eatingHours * MINUTES_PER_HOUR
+
+        return when {
+            currentMinutes < startMinutes -> FastingDayPhase.BEFORE_FIRST_MEAL
+            currentMinutes < endMinutes && endMinutes <= MINUTES_PER_DAY -> FastingDayPhase.EATING_WINDOW
+            else -> FastingDayPhase.AFTER_LAST_BITE
+        }
+    }
+
     fun isEatingWindow(firstMeal: MealTime, currentTime: MealTime): Boolean {
         val startMinutes = firstMeal.totalMinutes
         val currentMinutes = currentTime.totalMinutes
@@ -43,6 +67,12 @@ enum class FastingPlan(
         const val MINUTES_PER_HOUR = 60
         const val MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
     }
+}
+
+enum class FastingDayPhase {
+    BEFORE_FIRST_MEAL,
+    EATING_WINDOW,
+    AFTER_LAST_BITE
 }
 
 data class MealTime(
