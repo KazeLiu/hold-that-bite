@@ -100,6 +100,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
@@ -137,6 +138,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.LimitLine
 import com.github.mikephil.charting.components.XAxis
@@ -244,8 +247,8 @@ private val BottomNavItemWidth = 64.dp
 private val BottomNavItemHeight = 80.dp
 private val HomeFixedActionsFallbackPadding = 118.dp
 private val HomeFixedActionsGap = 10.dp
-private val HomeMonthCalendarHeight = 336.dp
-private val HomeWeekCalendarHeight = 188.dp
+private val HomeMonthCalendarHeight = 420.dp
+private val HomeWeekCalendarHeight = 204.dp
 private val CalendarCellGap = 8.dp
 private const val ProjectGitHubUrl = "https://github.com/KazeLiu/hold-that-bite"
 private const val UmengPrivacyPolicyUrl = "https://www.umeng.com/page/policy"
@@ -265,8 +268,9 @@ private fun HoldThatBiteApp(
     var snackRefusals by remember { mutableStateOf(store.loadSnackRefusals()) }
     var weights by remember { mutableStateOf(store.loadWeights()) }
     var currentTab by remember { mutableStateOf(AppTab.HOME) }
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var visibleMonth by remember { mutableStateOf(YearMonth.now()) }
+    val initialToday = remember { LocalDate.now() }
+    var selectedDate by remember { mutableStateOf(initialToday) }
+    var visibleMonth by remember { mutableStateOf(YearMonth.from(initialToday)) }
     var activeSheet by remember { mutableStateOf<ActiveSheet?>(null) }
     var pendingRecord by remember { mutableStateOf<BiteRecord?>(null) }
     var confirmMissedDate by remember { mutableStateOf<LocalDate?>(null) }
@@ -298,6 +302,15 @@ private fun HoldThatBiteApp(
         records = store.loadRecords()
         snackRefusals = store.loadSnackRefusals()
         weights = store.loadWeights()
+    }
+
+    fun refreshForForeground() {
+        reloadLocalData()
+        val today = LocalDate.now()
+        if (selectedDate != today) {
+            selectedDate = today
+            visibleMonth = YearMonth.from(today)
+        }
     }
 
     fun showMessage(message: String) {
@@ -469,6 +482,18 @@ private fun HoldThatBiteApp(
         if (shortcutSnackFeedback != null) {
             delay(3400)
             shortcutSnackFeedback = null
+        }
+    }
+
+    DisposableEffect(activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshForForeground()
+            }
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose {
+            activity.lifecycle.removeObserver(observer)
         }
     }
 
@@ -1012,6 +1037,7 @@ private fun HomePage(
                     record = selectedRecord,
                     effectiveStatus = effectiveBiteStatus(selectedDate, selectedRecord, today),
                     softDefaultKept = isSoftDefaultKept(selectedDate, selectedRecord, today),
+                    keptDays = keptDaysEndingAt(selectedDate, records, today),
                     snackRefusalCount = selectedSnackRefusalCount,
                     weightSummary = if (settings.weightTrendEnabled) buildWeightDaySummary(selectedDate, weights) else null,
                     weightUnit = settings.weightUnit,
@@ -1249,7 +1275,11 @@ private fun CalendarView(
     } else {
         BiteCalendar.weekGrid(selectedDate)
     }
-    val rows = days.chunked(7)
+    val rows = if (settings.calendarMode == CalendarMode.MONTH) {
+        days.chunked(7).dropLastWhile { row -> row.none { it.inCurrentPeriod } }
+    } else {
+        days.chunked(7)
+    }
     val period = CalendarPeriodView(
         title = if (settings.calendarMode == CalendarMode.MONTH) {
             "${visibleMonth.year}年${visibleMonth.monthValue}月"
@@ -1445,23 +1475,46 @@ private fun CalendarCell(
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
             Text(
                 text = day.date.dayOfMonth.toString(),
                 color = textColor,
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(3.dp))
-            Box(
-                modifier = Modifier
-                    .size(if (record == null) 4.dp else 7.dp)
-                    .clip(CircleShape)
-                    .background(if (record == null && !softDefaultKept) Border else statusColor.copy(alpha = if (softDefaultKept) 0.65f else 1f))
+            Spacer(modifier = Modifier.height(4.dp))
+            CalendarStatusDot(
+                record = record,
+                softDefaultKept = softDefaultKept,
+                statusColor = statusColor,
             )
         }
     }
+}
+
+@Composable
+private fun CalendarStatusDot(
+    record: BiteRecord?,
+    softDefaultKept: Boolean,
+    statusColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(if (record == null) 4.dp else 7.dp)
+            .clip(CircleShape)
+            .background(
+                if (record == null && !softDefaultKept) {
+                    Border
+                } else {
+                    statusColor.copy(alpha = if (softDefaultKept) 0.65f else 1f)
+                }
+            )
+    )
 }
 
 private fun effectiveBiteStatus(date: LocalDate, record: BiteRecord?, today: LocalDate): BiteStatus? {
@@ -1472,12 +1525,39 @@ private fun isSoftDefaultKept(date: LocalDate, record: BiteRecord?, today: Local
     return record == null && date.isBefore(today)
 }
 
+private fun keptDaysEndingAt(
+    date: LocalDate,
+    records: Map<String, BiteRecord>,
+    today: LocalDate,
+): Int {
+    val firstRecordedDate = records.keys
+        .mapNotNull { key -> runCatching { LocalDate.parse(key) }.getOrNull() }
+        .minOrNull()
+        ?: return 0
+    var cursor = date
+    var keptDays = 0
+    while (!cursor.isBefore(firstRecordedDate)) {
+        val status = effectiveBiteStatus(
+            date = cursor,
+            record = records[BiteCalendar.dateKey(cursor)],
+            today = today,
+        )
+        if (status != BiteStatus.KEPT) {
+            break
+        }
+        keptDays += 1
+        cursor = cursor.minusDays(1)
+    }
+    return keptDays
+}
+
 @Composable
 private fun DaySummary(
     selectedDate: LocalDate,
     record: BiteRecord?,
     effectiveStatus: BiteStatus?,
     softDefaultKept: Boolean,
+    keptDays: Int,
     snackRefusalCount: Int,
     weightSummary: WeightDaySummary?,
     weightUnit: WeightUnit,
@@ -1491,6 +1571,11 @@ private fun DaySummary(
         BiteStatus.MISSED -> "这天没守住"
         null -> "这天还没记录"
         }
+    }
+    val titleStatusText = if (effectiveStatus == BiteStatus.KEPT && keptDays > 0) {
+        "$statusText · 已经守住 $keptDays 天"
+    } else {
+        statusText
     }
     val defaultNote = when {
         selectedDate.isAfter(today) -> "这天还没来，放轻松"
@@ -1507,7 +1592,7 @@ private fun DaySummary(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 · $statusText",
+                    "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 · $titleStatusText",
                     color = TextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
