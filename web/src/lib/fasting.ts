@@ -21,7 +21,7 @@ export function getTotalMinutes(time: MealTime): number {
 
 export function lastBiteTime(firstMeal: MealTime, plan: FastingPlan): LastBiteTime {
   const config = getPlanConfig(plan);
-  const totalMinutes = getTotalMinutes(firstMeal) + config.fastingHours * 60;
+  const totalMinutes = getTotalMinutes(firstMeal) + config.eatingHours * 60;
   const isNextDay = totalMinutes >= 1440;
   const remainingMinutes = totalMinutes % 1440;
   return {
